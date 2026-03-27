@@ -11,6 +11,7 @@ export function update(state: GameState, dt: number) {
   updateParticles(state, dt);
   updateDoneOverlays(state, dt);
   updateStats(state, dt);
+  updateTooltip(state, dt);
 }
 
 function updateStats(state: GameState, dt: number) {
@@ -19,6 +20,15 @@ function updateStats(state: GameState, dt: number) {
   }
   if (state.stats.levelUpTimer > 0) {
     state.stats.levelUpTimer -= dt;
+  }
+}
+
+function updateTooltip(state: GameState, dt: number) {
+  if (state.tooltip) {
+    state.tooltip.timer -= dt;
+    if (state.tooltip.timer <= 0) {
+      state.tooltip = null;
+    }
   }
 }
 
@@ -83,6 +93,16 @@ function updateBot(state: GameState, dt: number) {
 
 function updateGummies(state: GameState, dt: number) {
   for (const g of state.gummies) {
+    // Smooth entry animation
+    const entryAge = performance.now() - g.entryTime;
+    const entryDuration = 300; // 0.3s
+    if (entryAge < entryDuration && g.state === 'orbiting') {
+      const entryProgress = entryAge / entryDuration;
+      g.scale = Math.min(1, entryProgress);
+    } else if (g.state === 'orbiting') {
+      g.scale = 1;
+    }
+
     switch (g.state) {
       case 'orbiting':
         if (!g.isDragging) {
@@ -309,6 +329,7 @@ export function createInitialState(width: number, height: number): GameState {
       dragOffsetY: 0,
       opacity: 1,
       scale: 1,
+      entryTime: performance.now() - 1000, // Already visible
       state: 'orbiting' as const,
       flightX: 0,
       flightY: 0,
@@ -326,20 +347,50 @@ export function createInitialState(width: number, height: number): GameState {
     width,
     height,
     connected: false,
+    tooltip: null,
   };
+}
+
+// Tap to show tooltip (Sprint 10)
+export function tapGummy(state: GameState, mx: number, my: number) {
+  // Find gummy under tap
+  for (const g of state.gummies) {
+    if (g.state !== 'orbiting') continue;
+    const dx = g.x - mx;
+    const dy = g.y - my;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < g.size + 15) {
+      state.tooltip = {
+        gummyId: g.id,
+        x: g.x,
+        y: g.y - g.size - 20,
+        timer: 3, // Show for 3 seconds
+      };
+      return;
+    }
+  }
 }
 
 export function addGummyFromServer(
   state: GameState,
-  data: { id: string; label: string; color: string; size: number; orbitRadius: number; orbitSpeed: number }
+  data: { id: string; label: string; color: string; size: number; orbitRadius: number; orbitSpeed: number; priority?: number }
 ) {
   const angle = Math.random() * Math.PI * 2;
+
+  // Priority-based orbital speed: higher priority = faster orbit
+  let orbitSpeed = data.orbitSpeed;
+  if (data.priority !== undefined) {
+    // Priority 8-10 (urgent) = 1.5x speed, 1-3 (low) = 0.7x speed
+    const speedMultiplier = 0.5 + (data.priority / 10);
+    orbitSpeed *= speedMultiplier;
+  }
+
   state.gummies.push({
     id: data.id,
     label: data.label,
     color: data.color,
     orbitRadius: data.orbitRadius,
-    orbitSpeed: data.orbitSpeed,
+    orbitSpeed,
     angle,
     size: data.size,
     x: state.bot.x + Math.cos(angle) * data.orbitRadius,
@@ -348,7 +399,8 @@ export function addGummyFromServer(
     dragOffsetX: 0,
     dragOffsetY: 0,
     opacity: 1,
-    scale: 1,
+    scale: 0, // Start at 0, will animate to 1
+    entryTime: performance.now(),
     state: 'orbiting',
     flightX: 0,
     flightY: 0,

@@ -11,6 +11,7 @@ import (
 
 	"github.com/valter-silva-au/gummy-bots/server/internal/agent"
 	"github.com/valter-silva-au/gummy-bots/server/internal/api"
+	"github.com/valter-silva-au/gummy-bots/server/internal/connector"
 	"github.com/valter-silva-au/gummy-bots/server/internal/store"
 )
 
@@ -47,6 +48,19 @@ func main() {
 
 	router := api.NewRouter(db, hub, bedrock)
 
+	// Start mock connectors
+	connectors := []connector.Connector{
+		connector.NewMockGmail(),
+		connector.NewMockCalendar(),
+		connector.NewMockNews(),
+	}
+
+	for _, conn := range connectors {
+		if err := conn.Start(db, hub); err != nil {
+			slog.Error("failed to start connector", "name", conn.Name(), "error", err)
+		}
+	}
+
 	srv := &http.Server{
 		Addr:         ":" + port,
 		Handler:      router,
@@ -68,6 +82,14 @@ func main() {
 	<-quit
 
 	slog.Info("shutting down server")
+
+	// Stop connectors
+	for _, conn := range connectors {
+		if err := conn.Stop(); err != nil {
+			slog.Error("failed to stop connector", "name", conn.Name(), "error", err)
+		}
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

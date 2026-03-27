@@ -13,11 +13,18 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   // Bot outer glow
   drawBotGlow(ctx, bot.x, bot.y, bot.radius, bot.breathPhase, bot.catchFlash, bot.catchColor);
 
-  // Gummies (behind bot glow, in front of grid)
-  for (const g of state.gummies) {
-    if (g.state !== 'dead') {
-      drawGummy(ctx, g);
-    }
+  // Gummies (behind bot glow, in front of grid) — max 8 visible
+  const visibleGummies = state.gummies.filter(g => g.state !== 'dead');
+  const overflowCount = Math.max(0, visibleGummies.length - 8);
+  const gummiesToShow = visibleGummies.slice(0, 8);
+
+  for (const g of gummiesToShow) {
+    drawGummy(ctx, g);
+  }
+
+  // Overflow indicator
+  if (overflowCount > 0) {
+    drawOverflowIndicator(ctx, width, height, overflowCount);
   }
 
   // Bot orb
@@ -49,6 +56,14 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState) {
 
   // Connection indicator
   drawConnectionDot(ctx, width, state.connected);
+
+  // Tooltip (Sprint 10)
+  if (state.tooltip) {
+    drawTooltip(ctx, state);
+  }
+
+  // Connector status icons (Sprint 11)
+  drawConnectorStatus(ctx, width, height);
 }
 
 function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -408,4 +423,102 @@ function darkenColor(hex: string, amount: number): string {
   const g = Math.max(0, parseInt(hex.slice(3, 5), 16) - amount);
   const b = Math.max(0, parseInt(hex.slice(5, 7), 16) - amount);
   return `rgb(${r}, ${g}, ${b})`;
+}
+
+// Sprint 9: Overflow indicator
+function drawOverflowIndicator(ctx: CanvasRenderingContext2D, width: number, height: number, count: number) {
+  const x = width / 2;
+  const y = height * 0.75;
+
+  ctx.save();
+  ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillStyle = 'rgba(255, 170, 68, 0.8)';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Background pill
+  const text = `+ ${count} more`;
+  const textWidth = ctx.measureText(text).width;
+  const pillW = textWidth + 24;
+  const pillH = 28;
+
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+  ctx.beginPath();
+  ctx.roundRect(x - pillW / 2, y - pillH / 2, pillW, pillH, pillH / 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#ffaa44';
+  ctx.fillText(text, x, y);
+  ctx.restore();
+}
+
+// Sprint 10: Tooltip
+function drawTooltip(ctx: CanvasRenderingContext2D, state: GameState) {
+  if (!state.tooltip) return;
+
+  const gummy = state.gummies.find(g => g.id === state.tooltip?.gummyId);
+  if (!gummy) {
+    state.tooltip = null;
+    return;
+  }
+
+  const x = state.tooltip.x;
+  const y = state.tooltip.y;
+  const alpha = Math.min(1, state.tooltip.timer);
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+
+  // Measure text
+  ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
+  const textWidth = ctx.measureText(gummy.label).width;
+  const cardW = textWidth + 24;
+  const cardH = 32;
+
+  // Background card
+  ctx.fillStyle = 'rgba(20, 20, 30, 0.95)';
+  ctx.beginPath();
+  ctx.roundRect(x - cardW / 2, y - cardH / 2, cardW, cardH, 6);
+  ctx.fill();
+
+  // Border
+  ctx.strokeStyle = gummy.color;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Text
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(gummy.label, x, y);
+
+  ctx.restore();
+}
+
+// Sprint 11: Connector status
+function drawConnectorStatus(ctx: CanvasRenderingContext2D, width: number, height: number) {
+  const connectors = [
+    { name: 'Gmail', icon: '📧', x: width / 2 - 80 },
+    { name: 'Calendar', icon: '📅', x: width / 2 },
+    { name: 'News', icon: '📰', x: width / 2 + 80 },
+  ];
+
+  const y = height - 50;
+
+  for (const conn of connectors) {
+    ctx.save();
+    ctx.font = '24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(conn.icon, conn.x, y);
+
+    // Syncing indicator (pulsing dot)
+    const pulse = Math.sin(performance.now() / 500) * 0.5 + 0.5;
+    ctx.fillStyle = `rgba(68, 204, 102, ${0.4 + pulse * 0.6})`;
+    ctx.beginPath();
+    ctx.arc(conn.x + 15, y - 10, 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
 }

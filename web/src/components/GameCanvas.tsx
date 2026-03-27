@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { createInitialState, update, startDrag, moveDrag, endDrag, addGummyFromServer } from '../engine/physics';
+import { createInitialState, update, startDrag, moveDrag, endDrag, addGummyFromServer, tapGummy } from '../engine/physics';
 import { render } from '../engine/renderer';
 import type { GameState } from '../engine/types';
 import { useWebSocket } from '../hooks/useWebSocket';
@@ -149,9 +149,20 @@ export function GameCanvas() {
 
     if (stateRef.current && dragStartRef.current) {
       const dt = Math.max(1, performance.now() - dragStartRef.current.time) / 1000;
-      const vx = (pos.x - dragStartRef.current.x) / dt;
-      const vy = (pos.y - dragStartRef.current.y) / dt;
-      endDrag(stateRef.current, pos.x, pos.y, vx / 60, vy / 60);
+      const duration = performance.now() - dragStartRef.current.time;
+      const dx = pos.x - dragStartRef.current.x;
+      const dy = pos.y - dragStartRef.current.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+
+      // Detect tap: short duration + small movement
+      if (duration < 200 && distance < 10) {
+        tapGummy(stateRef.current, pos.x, pos.y);
+      } else {
+        // Normal drag
+        const vx = dx / dt;
+        const vy = dy / dt;
+        endDrag(stateRef.current, pos.x, pos.y, vx / 60, vy / 60);
+      }
     }
     dragStartRef.current = null;
   };

@@ -15,6 +15,7 @@ export interface Gummy {
   // Animation state
   opacity: number;
   scale: number;
+  entryTime: number; // timestamp when gummy was created
   // Dismiss/catch flight
   state: 'orbiting' | 'caught' | 'dismissed' | 'dead';
   flightX: number;
@@ -85,6 +86,7 @@ export interface GameState {
   height: number;
   connected: boolean;
   stats: PlayerStats;
+  tooltip: { gummyId: string; x: number; y: number; timer: number } | null;
   onCatch?: (gummyId: string) => void;
   onPopSound?: (pitch: number) => void;
   onDismissSound?: () => void;
