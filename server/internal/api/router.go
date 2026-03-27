@@ -8,12 +8,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/valter-silva-au/gummy-bots/server/internal/agent"
 	"github.com/valter-silva-au/gummy-bots/server/internal/store"
 )
 
 const version = "0.1.0"
 
-func NewRouter(db *store.DB, hub *Hub) http.Handler {
+func NewRouter(db *store.DB, hub *Hub, bedrock *agent.BedrockClient) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -27,7 +28,7 @@ func NewRouter(db *store.DB, hub *Hub) http.Handler {
 		MaxAge:           300,
 	}))
 
-	h := &Handler{db: db, hub: hub}
+	h := &Handler{db: db, hub: hub, bedrock: bedrock}
 
 	r.Get("/api/health", h.Health)
 	r.Get("/ws", h.WebSocket)
@@ -48,12 +49,18 @@ func NewRouter(db *store.DB, hub *Hub) http.Handler {
 		r.Post("/{id}/execute", h.ExecuteGummy)
 	})
 
+	r.Route("/api/agent", func(r chi.Router) {
+		r.Post("/triage", h.AgentTriage)
+		r.Post("/execute", h.AgentExecute)
+	})
+
 	return r
 }
 
 type Handler struct {
-	db  *store.DB
-	hub *Hub
+	db      *store.DB
+	hub     *Hub
+	bedrock *agent.BedrockClient
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
@@ -172,6 +179,62 @@ func (h *Handler) GetActiveGummies(w http.ResponseWriter, r *http.Request) {
 		gummies = []store.Gummy{}
 	}
 	writeJSON(w, http.StatusOK, gummies)
+}
+
+func (h *Handler) AgentTriage(w http.ResponseWriter, r *http.Request) {
+	if !h.bedrock.IsConfigured() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "LLM not configured — set AWS_BEARER_TOKEN_BEDROCK",
+		})
+		return
+	}
+
+	var req agent.TriageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.TaskTitle == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "taskTitle required"})
+		return
+	}
+
+	result, err := h.bedrock.Triage(req)
+	if err != nil {
+		slog.Error("triage failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) AgentExecute(w http.ResponseWriter, r *http.Request) {
+	if !h.bedrock.IsConfigured() {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "LLM not configured — set AWS_BEARER_TOKEN_BEDROCK",
+		})
+		return
+	}
+
+	var req agent.ExecuteRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if req.TaskTitle == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "taskTitle required"})
+		return
+	}
+
+	result, err := h.bedrock.Execute(req)
+	if err != nil {
+		slog.Error("agent execute failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	h.hub.Broadcast(WSMessage{Type: "agent:completed", Payload: result})
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) ExecuteGummy(w http.ResponseWriter, r *http.Request) {

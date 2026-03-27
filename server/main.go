@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/valter-silva-au/gummy-bots/server/internal/agent"
 	"github.com/valter-silva-au/gummy-bots/server/internal/api"
 	"github.com/valter-silva-au/gummy-bots/server/internal/store"
 )
@@ -37,7 +38,14 @@ func main() {
 	hub := api.NewHub()
 	go hub.Run()
 
-	router := api.NewRouter(db, hub)
+	bedrock := agent.NewBedrockClient()
+	if bedrock.IsConfigured() {
+		slog.Info("bedrock LLM configured")
+	} else {
+		slog.Warn("bedrock LLM not configured — set AWS_BEARER_TOKEN_BEDROCK for agent features")
+	}
+
+	router := api.NewRouter(db, hub, bedrock)
 
 	srv := &http.Server{
 		Addr:         ":" + port,
