@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { createInitialState, update, startDrag, moveDrag, endDrag } from '../engine/physics';
+import { createInitialState, update, startDrag, moveDrag, endDrag, addGummyFromServer } from '../engine/physics';
 import { render } from '../engine/renderer';
 import type { GameState } from '../engine/types';
 import { useWebSocket } from '../hooks/useWebSocket';
+import type { WSMessage } from '../hooks/useWebSocket';
+
+const API_BASE = 'http://localhost:8088';
 
 export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -10,13 +13,35 @@ export function GameCanvas() {
   const lastTimeRef = useRef<number>(0);
   const dragStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
-  const handleWSMessage = useCallback(() => {
-    // Handle incoming gummy:new messages in future sprints
+  const handleWSMessage = useCallback((msg: WSMessage) => {
+    if (msg.type === 'gummy:new' && msg.payload && stateRef.current) {
+      const p = msg.payload as {
+        id: number; taskId: number; label: string; color: string;
+        size: number; orbitRadius: number; orbitSpeed: number; category: string;
+      };
+      addGummyFromServer(stateRef.current, {
+        id: String(p.id),
+        label: p.label || `Task #${p.taskId}`,
+        color: p.color,
+        size: (p.size || 1) * 30,
+        orbitRadius: p.orbitRadius || 160,
+        orbitSpeed: (p.orbitSpeed || 10000) / 15000, // Convert ms to rad/s approx
+      });
+    }
   }, []);
 
   const { isConnected } = useWebSocket(handleWSMessage);
 
-  // Initialize and run game loop
+  // Set up catch callback for execute requests
+  useEffect(() => {
+    if (stateRef.current) {
+      stateRef.current.onCatch = (gummyId: string) => {
+        fetch(`${API_BASE}/api/gummies/${gummyId}/execute`, { method: 'POST' })
+          .catch(() => { /* Server may be offline */ });
+      };
+    }
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -48,15 +73,13 @@ export function GameCanvas() {
 
     let animFrame: number;
     const loop = (time: number) => {
-      const dt = Math.min((time - lastTimeRef.current) / 1000, 0.05); // Cap at 50ms
+      const dt = Math.min((time - lastTimeRef.current) / 1000, 0.05);
       lastTimeRef.current = time;
 
       const state = stateRef.current;
       if (state) {
         state.connected = isConnected;
         update(state, dt);
-
-        // Reset context transform for fresh render
         ctx.setTransform(window.devicePixelRatio || 1, 0, 0, window.devicePixelRatio || 1, 0, 0);
         render(ctx, state);
       }
@@ -72,7 +95,6 @@ export function GameCanvas() {
     };
   }, [isConnected]);
 
-  // Mouse/touch handlers
   const getPos = (e: React.MouseEvent | React.TouchEvent) => {
     if ('touches' in e) {
       return { x: e.touches[0].clientX, y: e.touches[0].clientY };
@@ -104,7 +126,7 @@ export function GameCanvas() {
       const dt = Math.max(1, performance.now() - dragStartRef.current.time) / 1000;
       const vx = (pos.x - dragStartRef.current.x) / dt;
       const vy = (pos.y - dragStartRef.current.y) / dt;
-      endDrag(stateRef.current, pos.x, pos.y, vx / 60, vy / 60); // Convert to per-frame velocity
+      endDrag(stateRef.current, pos.x, pos.y, vx / 60, vy / 60);
     }
     dragStartRef.current = null;
   };

@@ -54,4 +54,5 @@ export interface GameState {
   width: number;
   height: number;
   connected: boolean;
+  onCatch?: (gummyId: string) => void;
 }

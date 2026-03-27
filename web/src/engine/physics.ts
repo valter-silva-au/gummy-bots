@@ -50,11 +50,12 @@ function updateGummies(state: GameState, dt: number) {
         if (catchT >= 1) {
           g.state = 'dead';
           spawnParticles(state, g.x, g.y, g.color);
-          // Trigger bot squish
           state.bot.catchFlash = 1;
           state.bot.catchColor = g.color;
           state.bot.squishX = 1.2;
           state.bot.squishY = 0.85;
+          // Notify server about catch
+          state.onCatch?.(g.id);
         }
         break;
 
@@ -230,4 +231,31 @@ export function createInitialState(width: number, height: number): GameState {
     height,
     connected: false,
   };
+}
+
+export function addGummyFromServer(
+  state: GameState,
+  data: { id: string; label: string; color: string; size: number; orbitRadius: number; orbitSpeed: number }
+) {
+  const angle = Math.random() * Math.PI * 2;
+  state.gummies.push({
+    id: data.id,
+    label: data.label,
+    color: data.color,
+    orbitRadius: data.orbitRadius,
+    orbitSpeed: data.orbitSpeed,
+    angle,
+    size: data.size,
+    x: state.bot.x + Math.cos(angle) * data.orbitRadius,
+    y: state.bot.y + Math.sin(angle) * data.orbitRadius,
+    isDragging: false,
+    dragOffsetX: 0,
+    dragOffsetY: 0,
+    opacity: 1,
+    scale: 1,
+    state: 'orbiting',
+    flightX: 0,
+    flightY: 0,
+    flightProgress: 0,
+  });
 }

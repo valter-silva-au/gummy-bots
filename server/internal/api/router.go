@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/valter-silva-au/gummy-bots/server/internal/agent"
+	"github.com/valter-silva-au/gummy-bots/server/internal/physics"
 	"github.com/valter-silva-au/gummy-bots/server/internal/store"
 )
 
@@ -124,12 +125,41 @@ func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		task.Category = "info"
 	}
 
+	if task.Complexity == 0 {
+		task.Complexity = 1
+	}
+	if task.Priority == 0 {
+		task.Priority = 5
+	}
+
 	if err := h.db.CreateTask(&task); err != nil {
 		slog.Error("create task failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create task"})
 		return
 	}
-	writeJSON(w, http.StatusCreated, task)
+
+	// Auto-generate gummy from task
+	gummy := physics.GenerateGummy(&task)
+	if err := h.db.CreateGummy(gummy); err != nil {
+		slog.Error("auto-create gummy failed", "error", err)
+	} else {
+		// Broadcast new gummy with task label
+		h.hub.Broadcast(WSMessage{Type: "gummy:new", Payload: map[string]interface{}{
+			"id":          gummy.ID,
+			"taskId":      gummy.TaskID,
+			"color":       gummy.Color,
+			"size":        gummy.Size,
+			"orbitRadius": gummy.OrbitRadius,
+			"orbitSpeed":  gummy.OrbitSpeed,
+			"label":       task.Title,
+			"category":    task.Category,
+		}})
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]interface{}{
+		"task":  task,
+		"gummy": gummy,
+	})
 }
 
 func (h *Handler) GetTasksByUser(w http.ResponseWriter, r *http.Request) {
@@ -250,6 +280,29 @@ func (h *Handler) ExecuteGummy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.hub.Broadcast(WSMessage{Type: "gummy:executed", Payload: map[string]int64{"id": id}})
+	// Broadcast execution to all clients
+	h.hub.Broadcast(WSMessage{Type: "gummy:executed", Payload: map[string]interface{}{
+		"id":     id,
+		"status": "executed",
+	}})
+
+	// If Bedrock is configured, run the executor agent asynchronously
+	if h.bedrock.IsConfigured() {
+		go func() {
+			result, err := h.bedrock.Execute(agent.ExecuteRequest{
+				TaskTitle: "Gummy task",
+				TaskContent: "Execute the flicked task",
+			})
+			if err != nil {
+				slog.Error("background execute failed", "error", err)
+				return
+			}
+			h.hub.Broadcast(WSMessage{Type: "agent:completed", Payload: map[string]interface{}{
+				"gummyId": id,
+				"result":  result,
+			}})
+		}()
+	}
+
 	writeJSON(w, http.StatusOK, map[string]string{"status": "executed"})
 }
