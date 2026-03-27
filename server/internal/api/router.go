@@ -29,7 +29,7 @@ func NewRouter(db *store.DB, hub *Hub, bedrock *agent.BedrockClient) http.Handle
 		MaxAge:           300,
 	}))
 
-	h := &Handler{db: db, hub: hub, bedrock: bedrock}
+	h := &Handler{db: db, hub: hub, bedrock: bedrock, combo: physics.NewComboTracker()}
 
 	r.Get("/api/health", h.Health)
 	r.Get("/ws", h.WebSocket)
@@ -37,6 +37,7 @@ func NewRouter(db *store.DB, hub *Hub, bedrock *agent.BedrockClient) http.Handle
 	r.Route("/api/users", func(r chi.Router) {
 		r.Post("/", h.CreateUser)
 		r.Get("/{id}", h.GetUser)
+		r.Get("/{id}/stats", h.GetUserStats)
 	})
 
 	r.Route("/api/tasks", func(r chi.Router) {
@@ -62,6 +63,7 @@ type Handler struct {
 	db      *store.DB
 	hub     *Hub
 	bedrock *agent.BedrockClient
+	combo   *physics.ComboTracker
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
@@ -106,6 +108,33 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, user)
+}
+
+func (h *Handler) GetUserStats(w http.ResponseWriter, r *http.Request) {
+	id, err := parseID(chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid user id"})
+		return
+	}
+
+	user, err := h.db.GetUser(id)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+		return
+	}
+
+	level := physics.LevelForXP(user.XP)
+	progress := physics.XPProgress(user.XP, level)
+	nextLevelXP := physics.XPForNextLevel(level)
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"xp":          user.XP,
+		"level":       level,
+		"progress":    progress,
+		"nextLevelXP": nextLevelXP,
+		"streakDays":  user.StreakDays,
+		"streakDate":  user.StreakLastDate,
+	})
 }
 
 func (h *Handler) CreateTask(w http.ResponseWriter, r *http.Request) {
@@ -278,6 +307,36 @@ func (h *Handler) ExecuteGummy(w http.ResponseWriter, r *http.Request) {
 		slog.Error("execute gummy failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to execute gummy"})
 		return
+	}
+
+	// Award XP
+	comboCount := h.combo.Record()
+	xpGained := physics.CalculateXP(1, comboCount)
+	comboMultiplier := physics.ComboMultiplier(comboCount)
+
+	// Update user 1 (default user for now)
+	user, _ := h.db.GetUser(1)
+	if user != nil {
+		newXP := user.XP + xpGained
+		newLevel := physics.LevelForXP(newXP)
+		h.db.UpdateUserXP(user.ID, newXP, newLevel)
+
+		// Update streak
+		newStreak, newDate := physics.UpdateStreak(user.StreakLastDate, user.StreakDays)
+		h.db.UpdateUserStreak(user.ID, newStreak, newDate)
+
+		leveledUp := newLevel > user.Level
+
+		h.hub.Broadcast(WSMessage{Type: "xp:gained", Payload: map[string]interface{}{
+			"xp":         xpGained,
+			"totalXP":    newXP,
+			"level":      newLevel,
+			"leveledUp":  leveledUp,
+			"combo":      comboCount,
+			"multiplier": comboMultiplier,
+			"streak":     newStreak,
+			"progress":   physics.XPProgress(newXP, newLevel),
+		}})
 	}
 
 	// Broadcast execution to all clients

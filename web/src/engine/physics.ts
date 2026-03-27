@@ -10,6 +10,16 @@ export function update(state: GameState, dt: number) {
   updateGummies(state, dt);
   updateParticles(state, dt);
   updateDoneOverlays(state, dt);
+  updateStats(state, dt);
+}
+
+function updateStats(state: GameState, dt: number) {
+  if (state.stats.xpGainedTimer > 0) {
+    state.stats.xpGainedTimer -= dt;
+  }
+  if (state.stats.levelUpTimer > 0) {
+    state.stats.levelUpTimer -= dt;
+  }
 }
 
 function updateBot(state: GameState, dt: number) {
@@ -306,6 +316,10 @@ export function createInitialState(width: number, height: number): GameState {
     })),
     particles: [],
     doneOverlays: [],
+    stats: {
+      xp: 0, level: 1, progress: 0, streak: 0, combo: 0,
+      multiplier: 1, xpGained: 0, xpGainedTimer: 0, leveledUp: false, levelUpTimer: 0,
+    },
     dragTarget: null,
     mouseX: 0,
     mouseY: 0,

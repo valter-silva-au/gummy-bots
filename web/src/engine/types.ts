@@ -60,6 +60,19 @@ export interface DoneOverlay {
   color: string;
 }
 
+export interface PlayerStats {
+  xp: number;
+  level: number;
+  progress: number;
+  streak: number;
+  combo: number;
+  multiplier: number;
+  xpGained: number;
+  xpGainedTimer: number;
+  leveledUp: boolean;
+  levelUpTimer: number;
+}
+
 export interface GameState {
   bot: BotState;
   gummies: Gummy[];
@@ -71,6 +84,7 @@ export interface GameState {
   width: number;
   height: number;
   connected: boolean;
+  stats: PlayerStats;
   onCatch?: (gummyId: string) => void;
   onPopSound?: (pitch: number) => void;
   onDismissSound?: () => void;

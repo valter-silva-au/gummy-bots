@@ -1,4 +1,4 @@
-import type { GameState, Gummy, Particle, DoneOverlay } from './types';
+import type { GameState, Gummy, Particle, DoneOverlay, PlayerStats } from './types';
 
 export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   const { width, height, bot } = state;
@@ -43,6 +43,9 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   for (const d of state.doneOverlays) {
     drawDoneOverlay(ctx, d);
   }
+
+  // Status bar
+  drawStatusBar(ctx, width, state.stats);
 
   // Connection indicator
   drawConnectionDot(ctx, width, state.connected);
@@ -308,6 +311,74 @@ function drawDoneOverlay(ctx: CanvasRenderingContext2D, d: DoneOverlay) {
   ctx.fillText(d.text, 0, 0);
 
   ctx.restore();
+}
+
+function drawStatusBar(ctx: CanvasRenderingContext2D, width: number, stats: PlayerStats) {
+  const y = 30;
+  const padding = 24;
+
+  // Level
+  ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`Level ${stats.level}`, padding, y);
+
+  // XP progress bar
+  const barX = padding + 90;
+  const barW = 120;
+  const barH = 6;
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+  ctx.beginPath();
+  ctx.roundRect(barX, y - barH / 2, barW, barH, 3);
+  ctx.fill();
+
+  if (stats.progress > 0) {
+    ctx.fillStyle = '#00dcff';
+    ctx.beginPath();
+    ctx.roundRect(barX, y - barH / 2, barW * stats.progress, barH, 3);
+    ctx.fill();
+  }
+
+  // Streak
+  ctx.font = '600 16px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillStyle = '#ffaa44';
+  ctx.textAlign = 'right';
+  const streakText = stats.streak > 0 ? `🔥 ${stats.streak}-day streak` : '';
+  ctx.fillText(streakText, width - padding, y);
+
+  // XP gained popup
+  if (stats.xpGainedTimer > 0) {
+    const alpha = Math.min(1, stats.xpGainedTimer);
+    ctx.globalAlpha = alpha;
+    ctx.font = 'bold 14px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = '#44ff88';
+    ctx.textAlign = 'center';
+    const yOff = (1 - alpha) * 20;
+    let xpText = `+${stats.xpGained} XP`;
+    if (stats.multiplier > 1) {
+      xpText += ` (${stats.multiplier}x combo!)`;
+    }
+    ctx.fillText(xpText, width / 2, y + 25 - yOff);
+    ctx.globalAlpha = 1;
+  }
+
+  // Level up!
+  if (stats.levelUpTimer > 0) {
+    const alpha = Math.min(1, stats.levelUpTimer);
+    const scale = 1 + (1 - alpha) * 0.3;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(width / 2, 70);
+    ctx.scale(scale, scale);
+    ctx.font = 'bold 24px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = '#ffe066';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`⚡ LEVEL ${stats.level}!`, 0, 0);
+    ctx.restore();
+  }
 }
 
 function drawConnectionDot(ctx: CanvasRenderingContext2D, width: number, connected: boolean) {

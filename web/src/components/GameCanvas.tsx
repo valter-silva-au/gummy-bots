@@ -15,7 +15,9 @@ export function GameCanvas() {
   const dragStartRef = useRef<{ x: number; y: number; time: number } | null>(null);
 
   const handleWSMessage = useCallback((msg: WSMessage) => {
-    if (msg.type === 'gummy:new' && msg.payload && stateRef.current) {
+    if (!stateRef.current) return;
+
+    if (msg.type === 'gummy:new' && msg.payload) {
       const p = msg.payload as {
         id: number; taskId: number; label: string; color: string;
         size: number; orbitRadius: number; orbitSpeed: number; category: string;
@@ -26,8 +28,28 @@ export function GameCanvas() {
         color: p.color,
         size: (p.size || 1) * 30,
         orbitRadius: p.orbitRadius || 160,
-        orbitSpeed: (p.orbitSpeed || 10000) / 15000, // Convert ms to rad/s approx
+        orbitSpeed: (p.orbitSpeed || 10000) / 15000,
       });
+    }
+
+    if (msg.type === 'xp:gained' && msg.payload) {
+      const p = msg.payload as {
+        xp: number; totalXP: number; level: number; leveledUp: boolean;
+        combo: number; multiplier: number; streak: number; progress: number;
+      };
+      const s = stateRef.current.stats;
+      s.xp = p.totalXP;
+      s.level = p.level;
+      s.progress = p.progress;
+      s.streak = p.streak;
+      s.combo = p.combo;
+      s.multiplier = p.multiplier;
+      s.xpGained = p.xp;
+      s.xpGainedTimer = 2;
+      if (p.leveledUp) {
+        s.leveledUp = true;
+        s.levelUpTimer = 3;
+      }
     }
   }, []);
 
