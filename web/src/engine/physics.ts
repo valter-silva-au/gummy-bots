@@ -14,7 +14,47 @@ export function update(state: GameState, dt: number) {
 
 function updateBot(state: GameState, dt: number) {
   const bot = state.bot;
-  bot.breathPhase += dt * 1.5;
+  bot.modeTimer += dt;
+
+  // Breathing speed varies by mode
+  const breathSpeeds: Record<string, number> = { idle: 1.5, thinking: 3, working: 2.5, celebrating: 4 };
+  bot.breathPhase += dt * (breathSpeeds[bot.mode] || 1.5);
+
+  // Spin (for working mode)
+  if (bot.mode === 'working') {
+    bot.spinAngle += dt * 3;
+  } else {
+    bot.spinAngle *= 0.95;
+  }
+
+  // Celebrate timer
+  if (bot.mode === 'celebrating') {
+    bot.celebrateTimer += dt;
+    if (bot.celebrateTimer > 1.5) {
+      bot.mode = 'idle';
+      bot.celebrateTimer = 0;
+      bot.modeTimer = 0;
+    }
+  }
+
+  // Thinking → idle timeout
+  if (bot.mode === 'thinking' && bot.modeTimer > 3) {
+    bot.mode = 'idle';
+    bot.modeTimer = 0;
+  }
+
+  // Working → idle timeout
+  if (bot.mode === 'working' && bot.modeTimer > 5) {
+    bot.mode = 'idle';
+    bot.modeTimer = 0;
+  }
+
+  // Check for caught gummies → set thinking
+  const hasCaughtGummy = state.gummies.some(g => g.state === 'caught');
+  if (hasCaughtGummy && bot.mode === 'idle') {
+    bot.mode = 'thinking';
+    bot.modeTimer = 0;
+  }
 
   // Decay catch flash
   if (bot.catchFlash > 0) {
@@ -24,6 +64,11 @@ function updateBot(state: GameState, dt: number) {
   // Recover squish
   bot.squishX += (1 - bot.squishX) * Math.min(1, dt * 8);
   bot.squishY += (1 - bot.squishY) * Math.min(1, dt * 8);
+
+  // Sparkle rotation
+  for (const s of bot.sparkles) {
+    s.angle += dt * s.speed;
+  }
 }
 
 function updateGummies(state: GameState, dt: number) {
@@ -64,6 +109,10 @@ function updateGummies(state: GameState, dt: number) {
             maxLife: 1.5,
             color: g.color,
           });
+          // Celebrate!
+          state.bot.mode = 'celebrating';
+          state.bot.modeTimer = 0;
+          state.bot.celebrateTimer = 0;
           // Audio + server notify
           state.onPopSound?.(0.8 + Math.random() * 0.4);
           state.onCatch?.(g.id);
@@ -212,6 +261,13 @@ export function createInitialState(width: number, height: number): GameState {
     { label: 'Team Standup', color: '#4a90ff', radius: 185, speed: 0.55, angle: Math.PI * 0.15, size: 34 },
   ];
 
+  const sparkles = Array.from({ length: 8 }, (_, i) => ({
+    angle: (Math.PI * 2 * i) / 8,
+    dist: 60 + Math.random() * 20,
+    size: 2 + Math.random() * 3,
+    speed: 0.5 + Math.random() * 1,
+  }));
+
   return {
     bot: {
       x: cx,
@@ -222,6 +278,11 @@ export function createInitialState(width: number, height: number): GameState {
       catchColor: '#00dcff',
       squishX: 1,
       squishY: 1,
+      mode: 'idle',
+      modeTimer: 0,
+      spinAngle: 0,
+      celebrateTimer: 0,
+      sparkles,
     },
     gummies: initialGummies.map((g, i) => ({
       id: String(i + 1),

@@ -23,6 +23,17 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   // Bot orb
   drawBot(ctx, bot.x, bot.y, bot.radius, bot.breathPhase, bot.squishX, bot.squishY, bot.catchFlash, bot.catchColor);
 
+  // Bot mode-specific effects
+  if (bot.mode === 'thinking') {
+    drawThinkingDots(ctx, bot.x, bot.y, bot.radius, bot.breathPhase);
+  }
+  if (bot.mode === 'working') {
+    drawWorkingRing(ctx, bot.x, bot.y, bot.radius, bot.spinAngle);
+  }
+  if (bot.mode === 'celebrating') {
+    drawSparkles(ctx, bot.x, bot.y, bot.sparkles, bot.celebrateTimer);
+  }
+
   // Particles (on top of everything)
   for (const p of state.particles) {
     drawParticle(ctx, p);
@@ -192,6 +203,82 @@ function drawParticle(ctx: CanvasRenderingContext2D, p: Particle) {
   ctx.arc(p.x, p.y, p.radius * alpha, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
+}
+
+function drawThinkingDots(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, phase: number) {
+  const dotCount = 3;
+  for (let i = 0; i < dotCount; i++) {
+    const dotPhase = phase * 4 + i * 0.8;
+    const alpha = 0.3 + Math.sin(dotPhase) * 0.3;
+    const yOffset = Math.sin(dotPhase) * 5;
+    const dotX = x - 12 + i * 12;
+    const dotY = y + r + 20 + yOffset;
+
+    ctx.fillStyle = `rgba(255, 200, 50, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawWorkingRing(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, spinAngle: number) {
+  const ringR = r * 1.4;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(spinAngle);
+
+  // Dashed spinning ring
+  ctx.strokeStyle = 'rgba(0, 220, 255, 0.3)';
+  ctx.lineWidth = 2;
+  ctx.setLineDash([10, 15]);
+  ctx.beginPath();
+  ctx.arc(0, 0, ringR, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Accent dot on ring
+  ctx.fillStyle = 'rgba(0, 220, 255, 0.8)';
+  ctx.beginPath();
+  ctx.arc(ringR, 0, 4, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawSparkles(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number,
+  sparkles: Array<{ angle: number; dist: number; size: number }>,
+  timer: number
+) {
+  const alpha = Math.min(1, timer * 3) * Math.max(0, 1 - timer / 1.5);
+
+  for (const s of sparkles) {
+    const sx = x + Math.cos(s.angle) * s.dist;
+    const sy = y + Math.sin(s.angle) * s.dist;
+    const pulse = 0.5 + Math.sin(timer * 10 + s.angle * 3) * 0.5;
+
+    ctx.save();
+    ctx.globalAlpha = alpha * pulse;
+    ctx.translate(sx, sy);
+
+    // Draw 4-point star
+    const size = s.size * (1 + pulse * 0.5);
+    ctx.fillStyle = '#ffe066';
+    ctx.beginPath();
+    ctx.moveTo(0, -size);
+    ctx.lineTo(size * 0.3, -size * 0.3);
+    ctx.lineTo(size, 0);
+    ctx.lineTo(size * 0.3, size * 0.3);
+    ctx.lineTo(0, size);
+    ctx.lineTo(-size * 0.3, size * 0.3);
+    ctx.lineTo(-size, 0);
+    ctx.lineTo(-size * 0.3, -size * 0.3);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.restore();
+  }
 }
 
 function drawDoneOverlay(ctx: CanvasRenderingContext2D, d: DoneOverlay) {

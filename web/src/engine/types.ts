@@ -33,6 +33,8 @@ export interface Particle {
   maxLife: number;
 }
 
+export type BotMode = 'idle' | 'thinking' | 'working' | 'celebrating';
+
 export interface BotState {
   x: number;
   y: number;
@@ -42,6 +44,11 @@ export interface BotState {
   catchColor: string;
   squishX: number;
   squishY: number;
+  mode: BotMode;
+  modeTimer: number; // seconds in current mode
+  spinAngle: number;
+  celebrateTimer: number;
+  sparkles: Array<{ angle: number; dist: number; size: number; speed: number }>;
 }
 
 export interface DoneOverlay {

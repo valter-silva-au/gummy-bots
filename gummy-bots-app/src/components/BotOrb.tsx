@@ -17,12 +17,15 @@ import { LinearGradient } from 'expo-linear-gradient';
 const BOT_SIZE = 100;
 const GLOW_SIZE = 180;
 
+export type BotMode = 'idle' | 'thinking' | 'working' | 'celebrating';
+
 interface BotOrbProps {
   catchFlash: SharedValue<number>;
   catchColor: SharedValue<string>;
+  mode?: BotMode;
 }
 
-export default function BotOrb({ catchFlash, catchColor }: BotOrbProps) {
+export default function BotOrb({ catchFlash, catchColor, mode = 'idle' }: BotOrbProps) {
   const breathe = useSharedValue(0);
   const ringPulse = useSharedValue(0);
 
