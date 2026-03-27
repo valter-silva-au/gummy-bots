@@ -36,6 +36,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Ensure default user exists
+	if _, err := db.GetUser(1); err != nil {
+		if _, err := db.CreateUser("player"); err != nil {
+			slog.Error("failed to create default user", "error", err)
+		} else {
+			slog.Info("created default user", "username", "player")
+		}
+	}
+
 	hub := api.NewHub()
 	go hub.Run()
 

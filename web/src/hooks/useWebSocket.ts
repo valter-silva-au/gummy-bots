@@ -6,12 +6,14 @@ export interface WSMessage {
 }
 
 const WS_URL = 'ws://localhost:8088/ws';
-const RECONNECT_DELAY = 3000;
+const RECONNECT_BASE = 1000;
+const RECONNECT_MAX = 30000;
 
 export function useWebSocket(onMessage?: (msg: WSMessage) => void) {
   const [isConnected, setIsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const attemptRef = useRef(0);
 
   const connect = useCallback(() => {
     try {
@@ -19,6 +21,7 @@ export function useWebSocket(onMessage?: (msg: WSMessage) => void) {
 
       ws.onopen = () => {
         setIsConnected(true);
+        attemptRef.current = 0; // Reset backoff on successful connect
         ws.send(JSON.stringify({ type: 'ping' }));
       };
 
@@ -34,7 +37,10 @@ export function useWebSocket(onMessage?: (msg: WSMessage) => void) {
       ws.onclose = () => {
         setIsConnected(false);
         wsRef.current = null;
-        reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY);
+        // Exponential backoff: 1s, 2s, 4s, 8s, 16s, max 30s
+        const delay = Math.min(RECONNECT_MAX, RECONNECT_BASE * Math.pow(2, attemptRef.current));
+        attemptRef.current++;
+        reconnectTimer.current = setTimeout(connect, delay);
       };
 
       ws.onerror = () => {
@@ -43,7 +49,9 @@ export function useWebSocket(onMessage?: (msg: WSMessage) => void) {
 
       wsRef.current = ws;
     } catch {
-      reconnectTimer.current = setTimeout(connect, RECONNECT_DELAY);
+      const delay = Math.min(RECONNECT_MAX, RECONNECT_BASE * Math.pow(2, attemptRef.current));
+      attemptRef.current++;
+      reconnectTimer.current = setTimeout(connect, delay);
     }
   }, [onMessage]);
 

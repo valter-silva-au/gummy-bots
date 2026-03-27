@@ -21,6 +21,7 @@ func NewRouter(db *store.DB, hub *Hub, bedrock *agent.BedrockClient) http.Handle
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
+	r.Use(requestTimer)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:8081", "http://localhost:5173", "http://localhost:19006"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
