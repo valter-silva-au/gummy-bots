@@ -57,12 +57,16 @@ gummy-bots/
 ├── README.md
 ├── docs/
 │   ├── idea.md            ← Full product vision
-│   └── market-research.md ← Deep market & feasibility analysis
+│   ├── market-research.md ← Deep market & feasibility analysis
+│   └── harness.md         ← Development harness (3-agent sprint workflow)
 ├── memory-bank/
 │   ├── project-brief.md   ← Core requirements and goals
 │   ├── active-context.md  ← Current work focus and recent changes
 │   ├── progress.md        ← What's done, what's next
 │   └── decisions.md       ← Architecture decisions and rationale
+├── sprints/
+│   ├── backlog.md         ← Ordered feature backlog
+│   └── sprint-{N}/       ← Per-sprint contracts, evaluations, feedback
 └── gummy-bots-app/        ← Expo prototype
     ├── App.tsx
     ├── src/components/
@@ -72,6 +76,22 @@ gummy-bots/
 ## Memory Bank
 Read `memory-bank/*.md` at the start of every session for persistent context.
 Update `memory-bank/active-context.md` and `memory-bank/progress.md` after significant changes.
+
+## Development Harness (IMPORTANT)
+Read `docs/harness.md` before starting any feature work. It defines a 3-agent sprint workflow:
+
+1. **Plan** — pick next feature from `sprints/backlog.md`
+2. **Contract** — write `sprints/sprint-{N}/contract.md` with acceptance criteria
+3. **Build** — implement one feature, commit with git
+4. **Evaluate** — grade against 5 criteria (physics feel, visual design, originality, craft, functionality)
+5. **Iterate** — if any score < 6/10, fix and re-evaluate before moving on
+
+Key rules:
+- One feature per sprint. No scope creep.
+- Physics feel, visual design, and originality are weighted HIGH — push beyond safe/generic.
+- Communicate via files in `sprints/` directory.
+- Commit after each completed sprint.
+- Update memory-bank after each sprint.
 
 ## Commands
 ```bash
