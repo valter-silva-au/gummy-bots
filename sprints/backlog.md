@@ -1,118 +1,138 @@
-# Sprint Backlog — Gummy Bots
+# Sprint Backlog — Gummy Bots (Full-Stack Local Build)
 
+> Everything runs locally. Go backend + Expo mobile + React web. Bedrock for LLM.
 > Ordered by priority. Each sprint = one feature. Work top-down.
+> **Build target: 12-hour autonomous session. Non-stop.**
 
-## Sprint 1: Physics Engine Polish
-**Priority:** P0 — The moat
+## Phase 1: Foundation (Sprints 1-4)
+
+### Sprint 1: Go Server Skeleton
+- Initialize Go module (`server/`)
+- HTTP server with chi or stdlib router
+- WebSocket endpoint (`/ws`) for real-time gummy updates
+- SQLite setup with migrations (users, tasks, gummies, xp, streaks)
+- Health check endpoint (`/api/health`)
+- CORS configured for local dev (localhost:3000, localhost:8081)
+- **Acceptance:** `go run .` starts server, `/api/health` returns 200, WebSocket connects
+
+### Sprint 2: Bedrock LLM Integration
+- Amazon Bedrock client using API Key auth (`AWS_BEARER_TOKEN_BEDROCK`)
+- Two agent modes:
+  - **Monitor agent** (Sonnet 4.6): fast triage, categorize incoming tasks, generate gummy metadata
+  - **Executor agent** (Opus 4.6): complex task execution (draft emails, schedule events)
+- Agent request/response types in Go
+- Rate limiting + error handling
+- **Acceptance:** Can send a prompt to Bedrock, get response, log it
+
+### Sprint 3: Mobile App Physics Polish
 - Tune flick physics: momentum, inertia, deceleration curves
 - Add magnetic snapping / gravity well around bot (invisible assist)
 - Bot catch animation: squish, absorb, glow pulse
 - Gummy miss: bounce off screen edge, drift back to orbit
-- Ensure 60fps on mid-range devices
+- WebSocket client connecting to Go server
+- 60fps on mid-range devices
+- **Acceptance:** Flick feels satisfying, bot catches reliably, connected to server
 
-## Sprint 2: Multisensory Feedback
-**Priority:** P0 — The dopamine loop
-- ASMR-style pop sound on catch (soft, satisfying)
-- Rich haptic feedback: different patterns for catch vs dismiss vs miss
-- Visual particle burst on gummy pop
-- "✓ Done" toast with slide-up animation + auto-dismiss
-- Bot celebration state (brief sparkle/pulse after catch)
+### Sprint 4: React Web App
+- Vite + React + TypeScript setup (`web/`)
+- Canvas/WebGL renderer for bot + gummies
+- Same dark aesthetic (#0a0a1a)
+- Mouse drag = flick equivalent
+- WebSocket connection to Go server
+- Responsive layout (desktop + tablet)
+- **Acceptance:** Web app mirrors mobile experience, connected to same server
 
-## Sprint 3: Bot Personality & States
-**Priority:** P1 — Character
-- Idle: gentle breathing pulse + soft glow
-- Thinking: spinning/processing animation when task is in-flight
-- Working: active glow, subtle vibration
-- Celebrating: sparkle burst, brief size bounce after completion
-- Smooth transitions between states
-- Bot "face" or expression (eyes? glow patterns?)
+## Phase 2: Core Loop (Sprints 5-8)
 
-## Sprint 4: Gummy Orbit System
-**Priority:** P1 — Visual hierarchy
-- Dynamic orbit speeds (urgent = faster orbit, backlog = slower)
-- Size encoding (small = quick task, large = complex)
+### Sprint 5: Task & Gummy Pipeline
+- Go: Task model (id, title, category, priority, complexity, status)
+- Go: Gummy generation from tasks (color, size, orbit distance)
+- Go: WebSocket broadcast when new gummy created
+- Mobile + Web: receive gummies via WebSocket, render in orbit
+- Go: Flick endpoint (`POST /api/gummies/{id}/execute`) triggers executor agent
+- **Acceptance:** Create task via API → gummy appears on both clients → flick executes
+
+### Sprint 6: Multisensory Feedback
+- Mobile: ASMR-style pop sound on catch
+- Mobile: Rich haptic feedback (catch vs dismiss vs miss patterns)
+- Mobile + Web: Particle burst on gummy pop
+- Web: Web Audio API for pop sounds
+- Bot celebration state (sparkle/pulse after catch)
+- "✓ Done" toast with slide-up + auto-dismiss
+- **Acceptance:** Every catch triggers triple feedback (visual + audio + haptic)
+
+### Sprint 7: Bot Personality & States
+- Idle: breathing pulse + soft glow
+- Thinking: processing animation when task in-flight
+- Working: active glow during execution
+- Celebrating: sparkle burst after completion
+- Smooth state transitions
+- Bot expressions (glow patterns or simple face)
+- Synced across mobile + web via WebSocket state
+- **Acceptance:** Bot visibly reacts to interactions, states are distinct
+
+### Sprint 8: XP, Levels & Streaks
+- Go: XP system (earn per task, varied by complexity)
+- Go: Level progression with thresholds
+- Go: Daily streak tracking with SQLite persistence
+- Go: Combo multiplier for rapid completions
+- Mobile + Web: Level-up animation
+- Mobile + Web: Streak display with fire emoji
+- **Acceptance:** Complete tasks → XP goes up → level changes → streak tracks
+
+## Phase 3: Intelligence (Sprints 9-11)
+
+### Sprint 9: Gummy Orbit System
+- Dynamic orbit speeds (urgent = faster)
+- Size encoding (small = quick, large = complex)
 - Distance from center = priority (auto-sort)
-- Smooth entry animation when new gummy appears
-- Gummy labels readable without tapping
-- Max ~8 gummies visible, overflow indicator
+- Smooth entry animation for new gummies
+- Labels readable without tapping
+- Max ~8 visible, overflow indicator
+- **Acceptance:** Gummies visually encode priority/complexity, no clutter
 
-## Sprint 5: Gesture Refinement
-**Priority:** P1 — Interaction depth
-- Long press on gummy → detail panel slides up (task preview + customize)
-- Flick away from bot → dismiss/snooze with drift animation
+### Sprint 10: Gesture Refinement
+- Long press → detail panel (task preview + customize before flick)
+- Flick away → dismiss/snooze with drift animation
 - Tap gummy → quick preview tooltip
-- Tap bot → open chat/voice input modal
-- Pinch zoom → filter by priority (zoom in = urgent only, zoom out = all)
+- Tap bot → chat/voice input modal (sends to Bedrock)
+- Pinch zoom (mobile) → priority filter
+- **Acceptance:** All gesture variants work reliably
 
-## Sprint 6: XP & Leveling System
-**Priority:** P2 — Gamification core
-- XP earned per completed task (varied by complexity)
-- Level progression with thresholds
-- Level-up animation (full-screen celebration)
-- Persistent storage (AsyncStorage or SQLite)
-- Combo multiplier for rapid sequential completions
+### Sprint 11: Mock Connectors
+- Go: Connector interface (pluggable)
+- Mock Gmail connector: generates fake email gummies every 30s
+- Mock Calendar connector: generates fake event gummies
+- Mock News connector: generates fake news digest gummies
+- Connector dock shows status (connected/syncing)
+- **Acceptance:** App feels alive with auto-generated gummies from mock connectors
 
-## Sprint 7: Streak System
-**Priority:** P2 — Retention
-- Daily streak counter with persistence
-- Streak milestones (3, 7, 14, 30 days) with special animations
-- Streak freeze mechanic (1 free miss per week?)
-- Visual streak indicator in status bar (fire emoji + count)
+## Phase 4: Polish (Sprints 12-14)
 
-## Sprint 8: Bot Evolution Visuals
-**Priority:** P2 — Progression reward
+### Sprint 12: Bot Evolution Visuals
 - 4 evolution stages tied to level
-  - Level 1-5: Simple orb (current)
-  - Level 6-15: Orb with eye/face features
-  - Level 16-30: Detailed character with accessories
-  - Level 31+: Premium/legendary appearance
+- Level 1-5: Simple orb
+- Level 6-15: Orb with features
+- Level 16-30: Detailed character
+- Level 31+: Legendary appearance
 - Evolution transition animation
-- Preview of next evolution stage
+- **Acceptance:** Bot visually changes as user levels up
 
-## Sprint 9: Connector Dock (UI + Architecture)
-**Priority:** P2 — Real utility foundation
-- Connector dock redesign (tappable, animated icons)
-- OAuth2 flow architecture (token storage, refresh logic)
-- Connector status indicators (connected/disconnected/syncing)
-- Mock data flow: connector → gummy generation pipeline
-- Settings screen for managing connectors
-
-## Sprint 10: Gmail Connector (v1)
-**Priority:** P2 — First real connector
-- Google OAuth2 sign-in
-- Fetch unread emails → generate blue gummies
-- Flick to reply (AI-drafted response)
-- Long press → edit reply before sending
-- Archive/mark-as-read on dismiss
-
-## Sprint 11: Google Calendar Connector (v1)
-**Priority:** P2 — Second connector
-- Calendar OAuth2 (reuse Google auth)
-- Upcoming events → green gummies
-- Flick to RSVP / reschedule / set reminder
-- New event creation via bot chat
-
-## Sprint 12: Achievements System
-**Priority:** P3 — Engagement depth
-- Achievement definitions ("Inbox Zero", "Week Warrior", "Automation Master", etc.)
+### Sprint 13: Achievements System
+- Go: Achievement definitions + progress tracking
+- "Inbox Zero", "Week Warrior", "Automation Master", etc.
 - Unlock animations
-- Achievement gallery/trophy case screen
-- Progress indicators for in-progress achievements
+- Trophy case screen
+- **Acceptance:** Achievements unlock and display correctly
 
-## Sprint 13: Sound & Haptic Packs
-**Priority:** P3 — Monetization
-- Multiple sound themes (default, nature, retro, sci-fi)
-- Custom haptic patterns per theme
-- Preview before purchase
-- IAP integration (Expo IAP or RevenueCat)
-
-## Sprint 14: Bot Skins Store
-**Priority:** P3 — Monetization
-- Skin gallery with previews
-- IAP purchase flow
-- Equipped skin persistence
-- Seasonal/limited skins framework
+### Sprint 14: Final Integration & Polish
+- End-to-end flow: server → gummy → flick → execute → feedback → XP
+- Error handling + reconnection logic
+- Performance profiling (Go server < 10ms responses)
+- Code cleanup + documentation
+- Final git commit with all sprints complete
+- **Acceptance:** Full app works locally, all features integrated, no crashes
 
 ---
 
-*Backlog created: 2026-03-27 | Source: docs/idea.md + market-research.md*
+*Backlog created: 2026-03-27 | Architecture: Go + Expo + React + Bedrock | Runtime: 100% local*
