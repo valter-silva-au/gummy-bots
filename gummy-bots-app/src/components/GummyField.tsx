@@ -12,6 +12,7 @@ import Animated, {
   Easing,
   SharedValue,
   cancelAnimation,
+  withDelay,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
@@ -21,19 +22,23 @@ export interface GummyData {
   label: string;
   color: string;
   orbitRadius: number;
-  orbitSpeed: number; // full rotation in ms
-  startAngle: number; // radians
+  orbitSpeed: number;
+  startAngle: number;
+  size?: number; // 0.7-1.3 scale factor for complexity
 }
 
-const GUMMY_SIZE = 68;
-const BOT_CATCH_RADIUS = 80;
-
+const GUMMY_BASE_SIZE = 64;
+const BOT_GRAVITY_WELL = 120; // Magnetic snap radius — generous for imprecise flicks
+const BOT_CATCH_RADIUS = 85;  // Inner catch zone
+const VELOCITY_THRESHOLD = 300; // Min velocity toward center to trigger catch
+const EDGE_BOUNCE_DAMPING = 0.4;
 
 interface GummyFieldProps {
   gummies: GummyData[];
   centerX: number;
   centerY: number;
   onCatch: (gummy: GummyData) => void;
+  onDismiss?: (gummy: GummyData) => void;
   catchFlash: SharedValue<number>;
   catchColor: SharedValue<string>;
 }
@@ -43,6 +48,7 @@ interface SingleGummyProps {
   centerX: number;
   centerY: number;
   onCatch: (gummy: GummyData) => void;
+  onDismiss?: (gummy: GummyData) => void;
   catchFlash: SharedValue<number>;
   catchColor: SharedValue<string>;
 }
@@ -52,6 +58,7 @@ function SingleGummy({
   centerX,
   centerY,
   onCatch,
+  onDismiss,
   catchFlash,
   catchColor,
 }: SingleGummyProps) {
@@ -61,14 +68,27 @@ function SingleGummy({
   const dragY = useSharedValue(0);
   const isVisible = useSharedValue(1);
   const popScale = useSharedValue(1);
+  const glowIntensity = useSharedValue(0);
+  const wobble = useSharedValue(0);
 
-  // Orbit animation
+  const gummySize = GUMMY_BASE_SIZE * (gummy.size ?? 1);
+
+  // Orbit animation with slight wobble for organic feel
   useEffect(() => {
     angle.value = withRepeat(
       withTiming(gummy.startAngle + Math.PI * 2, {
         duration: gummy.orbitSpeed,
         easing: Easing.linear,
       }),
+      -1,
+      false
+    );
+    // Subtle size wobble for breathing effect
+    wobble.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 1500 + Math.random() * 1000, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 1500 + Math.random() * 1000, easing: Easing.inOut(Easing.ease) })
+      ),
       -1,
       false
     );
@@ -79,71 +99,132 @@ function SingleGummy({
     onCatch(gummy);
   }, [gummy, onCatch]);
 
-  const triggerSnoozeHaptic = useCallback(() => {
+  const triggerDismiss = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onDismiss?.(gummy);
+  }, [gummy, onDismiss]);
+
+  const triggerMissHaptic = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   }, []);
 
   const panGesture = Gesture.Pan()
     .onStart(() => {
       isDragging.value = true;
       cancelAnimation(angle);
-      // Store current orbit position as starting drag offset
       const currentX = Math.cos(angle.value) * gummy.orbitRadius;
       const currentY = Math.sin(angle.value) * gummy.orbitRadius;
       dragX.value = currentX;
       dragY.value = currentY;
+      // Lift effect
+      popScale.value = withSpring(1.15, { damping: 8, stiffness: 300 });
+      glowIntensity.value = withTiming(1, { duration: 150 });
     })
     .onUpdate((event) => {
       const currentX = Math.cos(angle.value) * gummy.orbitRadius;
       const currentY = Math.sin(angle.value) * gummy.orbitRadius;
       dragX.value = currentX + event.translationX;
       dragY.value = currentY + event.translationY;
+
+      // Glow intensifies as gummy approaches center (gravity well feedback)
+      const dist = Math.sqrt(dragX.value ** 2 + dragY.value ** 2);
+      if (dist < BOT_GRAVITY_WELL) {
+        glowIntensity.value = interpolate(dist, [0, BOT_GRAVITY_WELL], [2, 0.5]);
+      } else {
+        glowIntensity.value = 0.3;
+      }
     })
     .onEnd((event) => {
-      const currentX = dragX.value;
-      const currentY = dragY.value;
-      const distToCenter = Math.sqrt(currentX * currentX + currentY * currentY);
+      const posX = dragX.value;
+      const posY = dragY.value;
+      const distToCenter = Math.sqrt(posX * posX + posY * posY);
 
-      // Check velocity direction — is it heading toward center?
+      // Calculate velocity component toward center
+      const speed = Math.sqrt(event.velocityX ** 2 + event.velocityY ** 2);
       const velocityToCenter =
-        -(event.velocityX * currentX + event.velocityY * currentY) /
+        -(event.velocityX * posX + event.velocityY * posY) /
         (distToCenter || 1);
 
-      const isCaught =
-        distToCenter < BOT_CATCH_RADIUS || (velocityToCenter > 400 && distToCenter < gummy.orbitRadius * 1.2);
+      // MAGNETIC SNAPPING: generous catch detection
+      // 1. Already inside catch radius
+      // 2. Moving toward center with enough velocity and within gravity well
+      // 3. High velocity flick from further away but still directed at center
+      const isDirectHit = distToCenter < BOT_CATCH_RADIUS;
+      const isGravityAssist =
+        velocityToCenter > VELOCITY_THRESHOLD && distToCenter < BOT_GRAVITY_WELL;
+      const isPowerFlick =
+        velocityToCenter > 800 && distToCenter < gummy.orbitRadius * 1.3;
 
-      if (isCaught) {
-        // Fly to center and pop
-        dragX.value = withTiming(0, { duration: 150, easing: Easing.in(Easing.ease) });
-        dragY.value = withTiming(0, { duration: 150, easing: Easing.in(Easing.ease) });
+      if (isDirectHit || isGravityAssist || isPowerFlick) {
+        // === CATCH: Fly to center with squish ===
+
+        // Magnetic pull: curve toward center
+        dragX.value = withTiming(0, {
+          duration: isDirectHit ? 100 : 180,
+          easing: Easing.in(Easing.quad),
+        });
+        dragY.value = withTiming(0, {
+          duration: isDirectHit ? 100 : 180,
+          easing: Easing.in(Easing.quad),
+        });
+
+        // Pop: expand then shrink to nothing
         popScale.value = withSequence(
-          withTiming(0.3, { duration: 150 }),
-          withTiming(0, { duration: 100 })
+          withTiming(1.4, { duration: 80 }),
+          withTiming(0, { duration: 120, easing: Easing.in(Easing.ease) })
         );
-        isVisible.value = withTiming(0, { duration: 250 });
+        isVisible.value = withDelay(200, withTiming(0, { duration: 50 }));
 
-        // Flash the bot
+        // Flash the bot with gummy's color
         catchColor.value = gummy.color;
         catchFlash.value = withSequence(
-          withTiming(1, { duration: 100 }),
-          withTiming(0, { duration: 400 })
+          withTiming(1, { duration: 80 }),
+          withTiming(0, { duration: 500, easing: Easing.out(Easing.quad) })
         );
 
+        glowIntensity.value = withTiming(0, { duration: 200 });
         runOnJS(triggerCatch)();
+      } else if (speed > 600 && velocityToCenter < -200) {
+        // === DISMISS: Flicked away from center ===
+        const flickAngle = Math.atan2(event.velocityY, event.velocityX);
+        const flightDist = 400;
+        dragX.value = withTiming(posX + Math.cos(flickAngle) * flightDist, {
+          duration: 300,
+          easing: Easing.out(Easing.quad),
+        });
+        dragY.value = withTiming(posY + Math.sin(flickAngle) * flightDist, {
+          duration: 300,
+          easing: Easing.out(Easing.quad),
+        });
+        popScale.value = withTiming(0.3, { duration: 400 });
+        isVisible.value = withTiming(0, { duration: 400 });
+        glowIntensity.value = withTiming(0, { duration: 200 });
+        runOnJS(triggerDismiss)();
       } else {
-        // Snap back to orbit — keep isDragging true so position reads from dragX/dragY
-        runOnJS(triggerSnoozeHaptic)();
-        const restoreAngle = Math.atan2(currentY, currentX);
-        dragX.value = withSpring(Math.cos(restoreAngle) * gummy.orbitRadius, {
-          damping: 12,
-          stiffness: 120,
+        // === MISS: Bounce back to orbit ===
+        runOnJS(triggerMissHaptic)();
+        popScale.value = withSpring(1, { damping: 10, stiffness: 200 });
+        glowIntensity.value = withTiming(0, { duration: 300 });
+
+        // Spring back with overshoot for satisfying bounce
+        const restoreAngle = Math.atan2(posY, posX);
+        const targetX = Math.cos(restoreAngle) * gummy.orbitRadius;
+        const targetY = Math.sin(restoreAngle) * gummy.orbitRadius;
+
+        dragX.value = withSpring(targetX, {
+          damping: 8,
+          stiffness: 100,
+          mass: 1.2,
         });
         dragY.value = withSpring(
-          Math.sin(restoreAngle) * gummy.orbitRadius,
-          { damping: 12, stiffness: 120 },
+          targetY,
+          {
+            damping: 8,
+            stiffness: 100,
+            mass: 1.2,
+          },
           (finished) => {
             if (finished) {
-              // Spring settled — switch back to orbit mode
               angle.value = restoreAngle;
               isDragging.value = false;
               angle.value = withRepeat(
@@ -170,15 +251,24 @@ function SingleGummy({
       y = Math.sin(angle.value) * gummy.orbitRadius;
     }
 
+    const breathScale = interpolate(wobble.value, [0, 1], [0.97, 1.03]);
+
     return {
       opacity: isVisible.value,
       transform: [
-        { translateX: x - GUMMY_SIZE / 2 },
-        { translateY: y - GUMMY_SIZE / 2 },
-        { scale: popScale.value },
+        { translateX: x - gummySize / 2 },
+        { translateY: y - gummySize / 2 },
+        { scale: popScale.value * breathScale },
       ],
     };
   });
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(glowIntensity.value, [0, 1, 2], [0, 0.4, 0.8]),
+    transform: [
+      { scale: interpolate(glowIntensity.value, [0, 1, 2], [1, 1.3, 1.6]) },
+    ],
+  }));
 
   return (
     <GestureDetector gesture={panGesture}>
@@ -188,12 +278,28 @@ function SingleGummy({
           {
             left: centerX,
             top: centerY,
+            width: gummySize,
+            height: gummySize,
+            borderRadius: gummySize / 2,
             backgroundColor: gummy.color,
             shadowColor: gummy.color,
           },
           animatedStyle,
         ]}
       >
+        {/* Proximity glow */}
+        <Animated.View
+          style={[
+            styles.proximityGlow,
+            {
+              width: gummySize * 1.6,
+              height: gummySize * 1.6,
+              borderRadius: gummySize * 0.8,
+              backgroundColor: gummy.color,
+            },
+            glowStyle,
+          ]}
+        />
         <Text style={styles.gummyLabel} numberOfLines={2}>
           {gummy.label}
         </Text>
@@ -209,6 +315,7 @@ export default function GummyField({
   centerX,
   centerY,
   onCatch,
+  onDismiss,
   catchFlash,
   catchColor,
 }: GummyFieldProps) {
@@ -221,6 +328,7 @@ export default function GummyField({
           centerX={centerX}
           centerY={centerY}
           onCatch={onCatch}
+          onDismiss={onDismiss}
           catchFlash={catchFlash}
           catchColor={catchColor}
         />
@@ -232,15 +340,12 @@ export default function GummyField({
 const styles = StyleSheet.create({
   gummy: {
     position: 'absolute',
-    width: GUMMY_SIZE,
-    height: GUMMY_SIZE,
-    borderRadius: GUMMY_SIZE / 2,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.5,
-    shadowRadius: 10,
+    shadowRadius: 12,
     elevation: 8,
   },
   gummyLabel: {
@@ -248,9 +353,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     textAlign: 'center',
-    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowColor: 'rgba(0,0,0,0.4)',
     textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
+    textShadowRadius: 3,
   },
   gummyHighlight: {
     position: 'absolute',
@@ -261,5 +366,9 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.3)',
     transform: [{ rotate: '-15deg' }],
+  },
+  proximityGlow: {
+    position: 'absolute',
+    opacity: 0,
   },
 });
