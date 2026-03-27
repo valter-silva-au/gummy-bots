@@ -9,6 +9,7 @@ export function update(state: GameState, dt: number) {
   updateBot(state, dt);
   updateGummies(state, dt);
   updateParticles(state, dt);
+  updateDoneOverlays(state, dt);
 }
 
 function updateBot(state: GameState, dt: number) {
@@ -54,7 +55,17 @@ function updateGummies(state: GameState, dt: number) {
           state.bot.catchColor = g.color;
           state.bot.squishX = 1.2;
           state.bot.squishY = 0.85;
-          // Notify server about catch
+          // Done overlay
+          state.doneOverlays.push({
+            text: `✓ ${g.label}`,
+            x: state.bot.x,
+            y: state.bot.y - 80,
+            life: 1.5,
+            maxLife: 1.5,
+            color: g.color,
+          });
+          // Audio + server notify
+          state.onPopSound?.(0.8 + Math.random() * 0.4);
           state.onCatch?.(g.id);
         }
         break;
@@ -84,6 +95,14 @@ function updateParticles(state: GameState, dt: number) {
     p.vx *= 0.98;
   }
   state.particles = state.particles.filter(p => p.life > 0);
+}
+
+function updateDoneOverlays(state: GameState, dt: number) {
+  for (const d of state.doneOverlays) {
+    d.life -= dt;
+    d.y -= dt * 30; // Float upward
+  }
+  state.doneOverlays = state.doneOverlays.filter(d => d.life > 0);
 }
 
 function spawnParticles(state: GameState, x: number, y: number, color: string) {
@@ -173,6 +192,7 @@ export function endDrag(state: GameState, _mx: number, _my: number, vx: number, 
     g.dragOffsetX = vx / normSpeed;
     g.dragOffsetY = vy / normSpeed;
     g.flightProgress = 0;
+    state.onDismissSound?.();
   } else {
     // Snap back to orbit
     g.angle = Math.atan2(g.y - state.bot.y, g.x - state.bot.x);
@@ -224,6 +244,7 @@ export function createInitialState(width: number, height: number): GameState {
       flightProgress: 0,
     })),
     particles: [],
+    doneOverlays: [],
     dragTarget: null,
     mouseX: 0,
     mouseY: 0,

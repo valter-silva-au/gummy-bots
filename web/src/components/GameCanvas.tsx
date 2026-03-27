@@ -4,6 +4,7 @@ import { render } from '../engine/renderer';
 import type { GameState } from '../engine/types';
 import { useWebSocket } from '../hooks/useWebSocket';
 import type { WSMessage } from '../hooks/useWebSocket';
+import { playPopSound, playDismissSound } from '../engine/audio';
 
 const API_BASE = 'http://localhost:8088';
 
@@ -32,13 +33,15 @@ export function GameCanvas() {
 
   const { isConnected } = useWebSocket(handleWSMessage);
 
-  // Set up catch callback for execute requests
+  // Set up callbacks
   useEffect(() => {
     if (stateRef.current) {
       stateRef.current.onCatch = (gummyId: string) => {
         fetch(`${API_BASE}/api/gummies/${gummyId}/execute`, { method: 'POST' })
           .catch(() => { /* Server may be offline */ });
       };
+      stateRef.current.onPopSound = (pitch: number) => playPopSound(pitch);
+      stateRef.current.onDismissSound = () => playDismissSound();
     }
   }, []);
 

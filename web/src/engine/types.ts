@@ -44,10 +44,20 @@ export interface BotState {
   squishY: number;
 }
 
+export interface DoneOverlay {
+  text: string;
+  x: number;
+  y: number;
+  life: number;
+  maxLife: number;
+  color: string;
+}
+
 export interface GameState {
   bot: BotState;
   gummies: Gummy[];
   particles: Particle[];
+  doneOverlays: DoneOverlay[];
   dragTarget: string | null;
   mouseX: number;
   mouseY: number;
@@ -55,4 +65,6 @@ export interface GameState {
   height: number;
   connected: boolean;
   onCatch?: (gummyId: string) => void;
+  onPopSound?: (pitch: number) => void;
+  onDismissSound?: () => void;
 }

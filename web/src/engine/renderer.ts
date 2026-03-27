@@ -1,4 +1,4 @@
-import type { GameState, Gummy, Particle } from './types';
+import type { GameState, Gummy, Particle, DoneOverlay } from './types';
 
 export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   const { width, height, bot } = state;
@@ -26,6 +26,11 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   // Particles (on top of everything)
   for (const p of state.particles) {
     drawParticle(ctx, p);
+  }
+
+  // Done overlays
+  for (const d of state.doneOverlays) {
+    drawDoneOverlay(ctx, d);
   }
 
   // Connection indicator
@@ -187,6 +192,35 @@ function drawParticle(ctx: CanvasRenderingContext2D, p: Particle) {
   ctx.arc(p.x, p.y, p.radius * alpha, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
+}
+
+function drawDoneOverlay(ctx: CanvasRenderingContext2D, d: DoneOverlay) {
+  const alpha = Math.min(1, d.life / (d.maxLife * 0.3));
+  const scale = 0.8 + (1 - d.life / d.maxLife) * 0.3;
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(d.x, d.y);
+  ctx.scale(scale, scale);
+
+  // Background pill
+  ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, sans-serif';
+  const textWidth = ctx.measureText(d.text).width;
+  const pillW = textWidth + 32;
+  const pillH = 36;
+
+  ctx.fillStyle = colorWithAlpha(d.color, 0.85);
+  ctx.beginPath();
+  ctx.roundRect(-pillW / 2, -pillH / 2, pillW, pillH, pillH / 2);
+  ctx.fill();
+
+  // Text
+  ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(d.text, 0, 0);
+
+  ctx.restore();
 }
 
 function drawConnectionDot(ctx: CanvasRenderingContext2D, width: number, connected: boolean) {
