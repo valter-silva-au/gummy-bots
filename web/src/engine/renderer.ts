@@ -1,4 +1,4 @@
-import type { GameState, Gummy, Particle, DoneOverlay, PlayerStats } from './types';
+import type { GameState, Gummy, Particle, DoneOverlay, PlayerStats, EvolutionStage } from './types';
 
 export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   const { width, height, bot } = state;
@@ -10,8 +10,15 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   // Subtle grid pattern for depth
   drawGrid(ctx, width, height);
 
+  const stage = bot.evolutionStage;
+
+  // Evolution-specific background aura (stages 3+)
+  if (stage >= 3) {
+    drawEvolutionAura(ctx, bot.x, bot.y, bot.radius, bot.breathPhase, stage);
+  }
+
   // Bot outer glow
-  drawBotGlow(ctx, bot.x, bot.y, bot.radius, bot.breathPhase, bot.catchFlash, bot.catchColor);
+  drawBotGlow(ctx, bot.x, bot.y, bot.radius, bot.breathPhase, bot.catchFlash, bot.catchColor, stage);
 
   // Gummies (behind bot glow, in front of grid) — max 8 visible
   const visibleGummies = state.gummies.filter(g => g.state !== 'dead');
@@ -27,8 +34,23 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState) {
     drawOverflowIndicator(ctx, width, height, overflowCount);
   }
 
+  // Stage 2+: Inner ring patterns (behind bot orb)
+  if (stage >= 2) {
+    drawInnerRings(ctx, bot.x, bot.y, bot.radius, bot.breathPhase, stage);
+  }
+
   // Bot orb
-  drawBot(ctx, bot.x, bot.y, bot.radius, bot.breathPhase, bot.squishX, bot.squishY, bot.catchFlash, bot.catchColor);
+  drawBot(ctx, bot.x, bot.y, bot.radius, bot.breathPhase, bot.squishX, bot.squishY, bot.catchFlash, bot.catchColor, stage);
+
+  // Stage 3+: Crown/halo element
+  if (stage >= 3) {
+    drawCrownHalo(ctx, bot.x, bot.y, bot.radius, bot.breathPhase, stage);
+  }
+
+  // Stage 4: Legendary energy field
+  if (stage === 4) {
+    drawLegendaryField(ctx, bot.x, bot.y, bot.radius, bot.breathPhase);
+  }
 
   // Bot mode-specific effects
   if (bot.mode === 'thinking') {
@@ -39,6 +61,11 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   }
   if (bot.mode === 'celebrating') {
     drawSparkles(ctx, bot.x, bot.y, bot.sparkles, bot.celebrateTimer);
+  }
+
+  // Evolution transition flash
+  if (bot.evolutionTransition > 0) {
+    drawEvolutionTransition(ctx, bot.x, bot.y, bot.radius, bot.evolutionTransition, stage);
   }
 
   // Particles (on top of everything)
@@ -87,14 +114,17 @@ function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number) {
 function drawBotGlow(
   ctx: CanvasRenderingContext2D,
   x: number, y: number, r: number,
-  breathPhase: number, catchFlash: number, catchColor: string
+  breathPhase: number, catchFlash: number, catchColor: string,
+  stage: EvolutionStage = 1
 ) {
   const breathScale = 1 + Math.sin(breathPhase) * 0.08;
-  const glowR = r * 2.2 * breathScale;
-  const alpha = 0.08 + Math.sin(breathPhase) * 0.04 + catchFlash * 0.15;
+  const stageGlowMultiplier = 1 + (stage - 1) * 0.3; // Bigger glow at higher stages
+  const glowR = r * 2.2 * breathScale * stageGlowMultiplier;
+  const alpha = (0.08 + Math.sin(breathPhase) * 0.04 + catchFlash * 0.15) * (1 + (stage - 1) * 0.15);
 
+  const baseColor = stage >= 4 ? '#ffd700' : stage >= 3 ? '#66eeff' : '#00dcff';
   const grad = ctx.createRadialGradient(x, y, r * 0.5, x, y, glowR);
-  const color = catchFlash > 0.1 ? catchColor : '#00dcff';
+  const color = catchFlash > 0.1 ? catchColor : baseColor;
   grad.addColorStop(0, colorWithAlpha(color, alpha * 2));
   grad.addColorStop(0.5, colorWithAlpha(color, alpha));
   grad.addColorStop(1, 'transparent');
@@ -120,7 +150,8 @@ function drawBot(
   x: number, y: number, r: number,
   breathPhase: number,
   squishX: number, squishY: number,
-  catchFlash: number, catchColor: string
+  catchFlash: number, catchColor: string,
+  stage: EvolutionStage = 1
 ) {
   const breathScale = 1 + Math.sin(breathPhase) * 0.04;
   const rx = r * breathScale * squishX;
@@ -129,12 +160,35 @@ function drawBot(
   ctx.save();
   ctx.translate(x, y);
 
-  // Main orb
+  // Main orb — gradient varies by evolution stage
   const grad = ctx.createRadialGradient(-rx * 0.2, -ry * 0.3, 0, 0, 0, rx);
-  grad.addColorStop(0, '#78e8ff');
-  grad.addColorStop(0.3, '#00dcff');
-  grad.addColorStop(0.7, '#0099cc');
-  grad.addColorStop(1, '#006688');
+  if (stage === 4) {
+    // Legendary: gold → deep amber
+    grad.addColorStop(0, '#fff4b8');
+    grad.addColorStop(0.2, '#ffd700');
+    grad.addColorStop(0.5, '#ffaa00');
+    grad.addColorStop(0.8, '#cc7700');
+    grad.addColorStop(1, '#995500');
+  } else if (stage === 3) {
+    // Detailed: richer cyan → teal → deep blue
+    grad.addColorStop(0, '#aaf0ff');
+    grad.addColorStop(0.2, '#44ddff');
+    grad.addColorStop(0.5, '#00bbee');
+    grad.addColorStop(0.8, '#0088bb');
+    grad.addColorStop(1, '#005577');
+  } else if (stage === 2) {
+    // Featured: brighter cyan palette
+    grad.addColorStop(0, '#8aeeff');
+    grad.addColorStop(0.3, '#11ddff');
+    grad.addColorStop(0.7, '#00aadd');
+    grad.addColorStop(1, '#007799');
+  } else {
+    // Simple orb: original
+    grad.addColorStop(0, '#78e8ff');
+    grad.addColorStop(0.3, '#00dcff');
+    grad.addColorStop(0.7, '#0099cc');
+    grad.addColorStop(1, '#006688');
+  }
 
   ctx.fillStyle = grad;
   ctx.beginPath();
@@ -160,6 +214,15 @@ function drawBot(
   ctx.beginPath();
   ctx.ellipse(rx * 0.2, ry * 0.15, rx * 0.12, ry * 0.08, 0.2, 0, Math.PI * 2);
   ctx.fill();
+
+  // Stage 2+: Core shimmer
+  if (stage >= 2) {
+    const shimmer = Math.sin(breathPhase * 3) * 0.5 + 0.5;
+    ctx.fillStyle = `rgba(255, 255, 255, ${0.05 + shimmer * 0.08})`;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, rx * 0.6, ry * 0.6, breathPhase * 0.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
   ctx.restore();
 }
@@ -493,6 +556,225 @@ function drawTooltip(ctx: CanvasRenderingContext2D, state: GameState) {
   ctx.fillText(gummy.label, x, y);
 
   ctx.restore();
+}
+
+// Sprint 12: Evolution visuals
+
+function drawEvolutionAura(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, r: number,
+  breathPhase: number, stage: EvolutionStage
+) {
+  const layers = stage === 4 ? 3 : 2;
+  for (let i = 0; i < layers; i++) {
+    const phase = breathPhase + i * 0.8;
+    const auraR = r * (2.8 + i * 0.6) * (1 + Math.sin(phase) * 0.06);
+    const alpha = (0.03 - i * 0.008) * (1 + Math.sin(phase) * 0.5);
+    const color = stage === 4 ? '#ffd700' : '#00ccff';
+
+    ctx.fillStyle = colorWithAlpha(color, Math.max(0, alpha));
+    ctx.beginPath();
+    ctx.arc(x, y, auraR, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawInnerRings(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, r: number,
+  breathPhase: number, stage: EvolutionStage
+) {
+  const ringCount = stage >= 3 ? 3 : 1;
+  ctx.save();
+  ctx.translate(x, y);
+
+  for (let i = 0; i < ringCount; i++) {
+    const ringR = r * (1.15 + i * 0.15);
+    const alpha = (0.15 - i * 0.03) * (0.7 + Math.sin(breathPhase * 2 + i) * 0.3);
+    const rotation = breathPhase * (0.3 + i * 0.15) * (i % 2 === 0 ? 1 : -1);
+
+    ctx.save();
+    ctx.rotate(rotation);
+
+    const color = stage === 4 ? '#ffd700' : '#00dcff';
+    ctx.strokeStyle = colorWithAlpha(color, alpha);
+    ctx.lineWidth = 1.5;
+
+    // Dashed ring with varying dash pattern per stage
+    const dashLen = stage >= 3 ? 6 + i * 3 : 12;
+    const gapLen = stage >= 3 ? 8 + i * 4 : 20;
+    ctx.setLineDash([dashLen, gapLen]);
+    ctx.beginPath();
+    ctx.arc(0, 0, ringR, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    ctx.restore();
+  }
+
+  // Stage 2+: Orbital dots
+  const dotCount = stage >= 3 ? 6 : 3;
+  for (let i = 0; i < dotCount; i++) {
+    const angle = (Math.PI * 2 * i) / dotCount + breathPhase * 0.5;
+    const dist = r * 1.2;
+    const dotX = Math.cos(angle) * dist;
+    const dotY = Math.sin(angle) * dist;
+    const pulse = 0.4 + Math.sin(breathPhase * 3 + i * 1.2) * 0.6;
+
+    const color = stage === 4 ? '#ffd700' : '#00dcff';
+    ctx.fillStyle = colorWithAlpha(color, 0.3 * pulse);
+    ctx.beginPath();
+    ctx.arc(dotX, dotY, 2 + pulse, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+function drawCrownHalo(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, r: number,
+  breathPhase: number, stage: EvolutionStage
+) {
+  ctx.save();
+  ctx.translate(x, y);
+
+  const haloR = r * 0.85;
+  const haloY = -r * 0.75;
+  const float = Math.sin(breathPhase * 1.5) * 3;
+
+  if (stage === 4) {
+    // Legendary: golden crown with 5 points
+    const crownY = haloY + float - 5;
+    const crownW = r * 0.7;
+    const crownH = r * 0.3;
+
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.7)';
+    ctx.beginPath();
+    ctx.moveTo(-crownW, crownY + crownH);
+    for (let i = 0; i < 5; i++) {
+      const px = -crownW + (crownW * 2 * (i + 0.5)) / 5;
+      ctx.lineTo(px, crownY);
+      if (i < 4) {
+        const mx = -crownW + (crownW * 2 * (i + 1)) / 5;
+        ctx.lineTo(mx, crownY + crownH * 0.6);
+      }
+    }
+    ctx.lineTo(crownW, crownY + crownH);
+    ctx.closePath();
+    ctx.fill();
+
+    // Crown gems
+    for (let i = 0; i < 5; i++) {
+      const px = -crownW + (crownW * 2 * (i + 0.5)) / 5;
+      ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 100, 100, 0.8)' : 'rgba(100, 200, 255, 0.8)';
+      ctx.beginPath();
+      ctx.arc(px, crownY + 3, 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  } else {
+    // Stage 3: Glowing halo ring
+    const alpha = 0.25 + Math.sin(breathPhase * 2) * 0.1;
+
+    ctx.strokeStyle = colorWithAlpha('#66eeff', alpha);
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.ellipse(0, haloY + float, haloR, haloR * 0.25, 0, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Halo glow
+    ctx.strokeStyle = colorWithAlpha('#66eeff', alpha * 0.4);
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.ellipse(0, haloY + float, haloR, haloR * 0.25, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
+function drawLegendaryField(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, r: number,
+  breathPhase: number
+) {
+  // Rotating energy particles
+  const count = 12;
+  for (let i = 0; i < count; i++) {
+    const angle = (Math.PI * 2 * i) / count + breathPhase * 0.8;
+    const dist = r * 1.8 + Math.sin(breathPhase * 2 + i * 0.7) * 15;
+    const px = x + Math.cos(angle) * dist;
+    const py = y + Math.sin(angle) * dist;
+    const pulse = 0.3 + Math.sin(breathPhase * 4 + i * 1.5) * 0.7;
+    const size = 1.5 + pulse * 2;
+
+    ctx.fillStyle = `rgba(255, 215, 0, ${0.3 * pulse})`;
+    ctx.beginPath();
+    ctx.arc(px, py, size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Secondary ring of smaller particles
+  for (let i = 0; i < 8; i++) {
+    const angle = (Math.PI * 2 * i) / 8 - breathPhase * 0.5;
+    const dist = r * 2.3;
+    const px = x + Math.cos(angle) * dist;
+    const py = y + Math.sin(angle) * dist;
+    const pulse = 0.5 + Math.sin(breathPhase * 3 + i) * 0.5;
+
+    ctx.fillStyle = `rgba(255, 180, 50, ${0.15 * pulse})`;
+    ctx.beginPath();
+    ctx.arc(px, py, 1 + pulse, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawEvolutionTransition(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, r: number,
+  transitionTimer: number, stage: EvolutionStage
+) {
+  // Flash: bright white expanding ring that fades
+  const progress = 1 - transitionTimer / 2; // 0→1 over 2 seconds
+  const earlyPhase = Math.min(1, progress * 4); // Quick initial flash (0-0.25s)
+  const latePhase = Math.max(0, (progress - 0.2) / 0.8); // Slower fade
+
+  // White flash
+  if (earlyPhase < 1) {
+    const flashAlpha = (1 - earlyPhase) * 0.6;
+    ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r * (1 + earlyPhase * 2), 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Expanding color ring
+  const ringR = r * (1.5 + latePhase * 4);
+  const ringAlpha = Math.max(0, 0.5 - latePhase * 0.6);
+  const color = stage === 4 ? '#ffd700' : stage === 3 ? '#66eeff' : '#00ddff';
+
+  ctx.strokeStyle = colorWithAlpha(color, ringAlpha);
+  ctx.lineWidth = 3 - latePhase * 2;
+  ctx.beginPath();
+  ctx.arc(x, y, ringR, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Burst particles during early phase
+  if (progress < 0.5) {
+    const burstCount = 16;
+    for (let i = 0; i < burstCount; i++) {
+      const angle = (Math.PI * 2 * i) / burstCount;
+      const dist = r * (1 + progress * 6);
+      const px = x + Math.cos(angle) * dist;
+      const py = y + Math.sin(angle) * dist;
+      const alpha = Math.max(0, 0.8 - progress * 2);
+
+      ctx.fillStyle = colorWithAlpha(color, alpha);
+      ctx.beginPath();
+      ctx.arc(px, py, 3 - progress * 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
 }
 
 // Sprint 11: Connector status

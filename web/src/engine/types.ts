@@ -35,6 +35,7 @@ export interface Particle {
 }
 
 export type BotMode = 'idle' | 'thinking' | 'working' | 'celebrating';
+export type EvolutionStage = 1 | 2 | 3 | 4;
 
 export interface BotState {
   x: number;
@@ -50,6 +51,9 @@ export interface BotState {
   spinAngle: number;
   celebrateTimer: number;
   sparkles: Array<{ angle: number; dist: number; size: number; speed: number }>;
+  // Evolution
+  evolutionStage: EvolutionStage;
+  evolutionTransition: number; // 0 = none, >0 = animating (counts down)
 }
 
 export interface DoneOverlay {

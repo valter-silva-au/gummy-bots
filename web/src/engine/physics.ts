@@ -1,12 +1,20 @@
-import type { GameState, Gummy } from './types';
+import type { GameState, Gummy, EvolutionStage } from './types';
 
 const GRAVITY_WELL = 120;
 const CATCH_RADIUS = 85;
 const VELOCITY_CATCH_THRESHOLD = 8; // px/frame equivalent
 const PARTICLE_COUNT = 18;
 
+export function getEvolutionStage(level: number): EvolutionStage {
+  if (level >= 31) return 4;
+  if (level >= 16) return 3;
+  if (level >= 6) return 2;
+  return 1;
+}
+
 export function update(state: GameState, dt: number) {
   updateBot(state, dt);
+  updateEvolution(state, dt);
   updateGummies(state, dt);
   updateParticles(state, dt);
   updateDoneOverlays(state, dt);
@@ -29,6 +37,17 @@ function updateTooltip(state: GameState, dt: number) {
     if (state.tooltip.timer <= 0) {
       state.tooltip = null;
     }
+  }
+}
+
+function updateEvolution(state: GameState, dt: number) {
+  const newStage = getEvolutionStage(state.stats.level);
+  if (newStage !== state.bot.evolutionStage) {
+    state.bot.evolutionStage = newStage;
+    state.bot.evolutionTransition = 2; // 2 second transition animation
+  }
+  if (state.bot.evolutionTransition > 0) {
+    state.bot.evolutionTransition = Math.max(0, state.bot.evolutionTransition - dt);
   }
 }
 
@@ -313,6 +332,8 @@ export function createInitialState(width: number, height: number): GameState {
       spinAngle: 0,
       celebrateTimer: 0,
       sparkles,
+      evolutionStage: 1,
+      evolutionTransition: 0,
     },
     gummies: initialGummies.map((g, i) => ({
       id: String(i + 1),
