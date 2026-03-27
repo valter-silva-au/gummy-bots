@@ -38,6 +38,13 @@ function updateTooltip(state: GameState, dt: number) {
       state.tooltip = null;
     }
   }
+  // Achievement overlay
+  if (state.achievementOverlay) {
+    state.achievementOverlay.timer -= dt;
+    if (state.achievementOverlay.timer <= 0) {
+      state.achievementOverlay = null;
+    }
+  }
 }
 
 function updateEvolution(state: GameState, dt: number) {
@@ -369,6 +376,9 @@ export function createInitialState(width: number, height: number): GameState {
     height,
     connected: false,
     tooltip: null,
+    achievements: [],
+    achievementOverlay: null,
+    trophyPanelOpen: false,
   };
 }
 

@@ -91,7 +91,19 @@ export interface GameState {
   connected: boolean;
   stats: PlayerStats;
   tooltip: { gummyId: string; x: number; y: number; timer: number } | null;
+  // Achievements (Sprint 13)
+  achievements: AchievementUnlock[];
+  achievementOverlay: { name: string; icon: string; timer: number } | null;
+  trophyPanelOpen: boolean;
   onCatch?: (gummyId: string) => void;
   onPopSound?: (pitch: number) => void;
   onDismissSound?: () => void;
+}
+
+export interface AchievementUnlock {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  unlockedAt?: string;
 }

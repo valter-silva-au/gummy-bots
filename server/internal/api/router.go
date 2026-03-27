@@ -51,6 +51,11 @@ func NewRouter(db *store.DB, hub *Hub, bedrock *agent.BedrockClient) http.Handle
 		r.Post("/{id}/execute", h.ExecuteGummy)
 	})
 
+	r.Route("/api/achievements", func(r chi.Router) {
+		r.Get("/definitions", h.GetAchievementDefs)
+		r.Get("/user/{userId}", h.GetUserAchievements)
+	})
+
 	r.Route("/api/agent", func(r chi.Router) {
 		r.Post("/triage", h.AgentTriage)
 		r.Post("/execute", h.AgentExecute)
@@ -296,6 +301,91 @@ func (h *Handler) AgentExecute(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
+func (h *Handler) GetAchievementDefs(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, physics.AllAchievements)
+}
+
+func (h *Handler) GetUserAchievements(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseID(chi.URLParam(r, "userId"))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid user id"})
+		return
+	}
+
+	achievements, err := h.db.GetAchievements(userID)
+	if err != nil {
+		slog.Error("get achievements failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to get achievements"})
+		return
+	}
+
+	// Enrich with definitions
+	type enriched struct {
+		ID          string `json:"id"`
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Icon        string `json:"icon"`
+		UnlockedAt  string `json:"unlockedAt"`
+	}
+
+	var result []enriched
+	for _, a := range achievements {
+		def := physics.AchievementDefByID(a.Name)
+		if def != nil {
+			result = append(result, enriched{
+				ID:          def.ID,
+				Name:        def.Name,
+				Description: def.Description,
+				Icon:        def.Icon,
+				UnlockedAt:  a.UnlockedAt,
+			})
+		}
+	}
+	if result == nil {
+		result = []enriched{}
+	}
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (h *Handler) checkAchievements(userID int64, xpGained int, comboCount int, comboMultiplier float64, level int, streakDays int) {
+	already, err := h.db.GetAchievementSet(userID)
+	if err != nil {
+		slog.Error("get achievement set failed", "error", err)
+		return
+	}
+
+	executedCount, _ := h.db.CountExecutedGummies()
+	activeCount, _ := h.db.CountActiveGummies()
+
+	ctx := physics.CheckContext{
+		TotalExecutions: executedCount,
+		ComboCount:      comboCount,
+		XPGained:        xpGained,
+		Level:           level,
+		StreakDays:       streakDays,
+		ActiveGummies:   activeCount,
+		ComboMultiplier: comboMultiplier,
+	}
+
+	unlocked := physics.CheckAchievements(ctx, already)
+	for _, achID := range unlocked {
+		if err := h.db.CreateAchievement(userID, achID); err != nil {
+			slog.Error("create achievement failed", "achievement", achID, "error", err)
+			continue
+		}
+		def := physics.AchievementDefByID(achID)
+		if def != nil {
+			h.hub.Broadcast(WSMessage{Type: "achievement:unlocked", Payload: map[string]interface{}{
+				"id":          def.ID,
+				"name":        def.Name,
+				"description": def.Description,
+				"icon":        def.Icon,
+			}})
+			slog.Info("achievement unlocked", "user", userID, "achievement", achID)
+		}
+	}
+}
+
 func (h *Handler) ExecuteGummy(w http.ResponseWriter, r *http.Request) {
 	id, err := parseID(chi.URLParam(r, "id"))
 	if err != nil {
@@ -337,6 +427,9 @@ func (h *Handler) ExecuteGummy(w http.ResponseWriter, r *http.Request) {
 			"streak":     newStreak,
 			"progress":   physics.XPProgress(newXP, newLevel),
 		}})
+
+		// Check achievements
+		h.checkAchievements(user.ID, xpGained, comboCount, comboMultiplier, newLevel, newStreak)
 	}
 
 	// Broadcast execution to all clients

@@ -270,6 +270,46 @@ func (db *DB) CreateAchievement(userID int64, name string) error {
 	return nil
 }
 
+// HasAchievement checks if a user has a specific achievement.
+func (db *DB) HasAchievement(userID int64, name string) bool {
+	var count int
+	db.QueryRow("SELECT COUNT(*) FROM achievements WHERE user_id = ? AND name = ?", userID, name).Scan(&count)
+	return count > 0
+}
+
+// GetAchievementSet returns a set of achievement names for a user.
+func (db *DB) GetAchievementSet(userID int64) (map[string]bool, error) {
+	rows, err := db.Query("SELECT name FROM achievements WHERE user_id = ?", userID)
+	if err != nil {
+		return nil, fmt.Errorf("get achievement set: %w", err)
+	}
+	defer rows.Close()
+
+	set := make(map[string]bool)
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, fmt.Errorf("scan achievement name: %w", err)
+		}
+		set[name] = true
+	}
+	return set, rows.Err()
+}
+
+// CountExecutedGummies returns the total number of executed gummies.
+func (db *DB) CountExecutedGummies() (int, error) {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM gummies WHERE status = 'executed'").Scan(&count)
+	return count, err
+}
+
+// CountActiveGummies returns the number of orbiting gummies.
+func (db *DB) CountActiveGummies() (int, error) {
+	var count int
+	err := db.QueryRow("SELECT COUNT(*) FROM gummies WHERE status = 'orbiting'").Scan(&count)
+	return count, err
+}
+
 // GetAchievements returns all achievements for a user.
 func (db *DB) GetAchievements(userID int64) ([]Achievement, error) {
 	rows, err := db.Query(

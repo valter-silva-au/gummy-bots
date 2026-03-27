@@ -1,4 +1,4 @@
-import type { GameState, Gummy, Particle, DoneOverlay, PlayerStats, EvolutionStage } from './types';
+import type { GameState, Gummy, Particle, DoneOverlay, PlayerStats, EvolutionStage, AchievementUnlock } from './types';
 
 export function render(ctx: CanvasRenderingContext2D, state: GameState) {
   const { width, height, bot } = state;
@@ -91,6 +91,16 @@ export function render(ctx: CanvasRenderingContext2D, state: GameState) {
 
   // Connector status icons (Sprint 11)
   drawConnectorStatus(ctx, width, height);
+
+  // Achievement unlock overlay (Sprint 13)
+  if (state.achievementOverlay) {
+    drawAchievementOverlay(ctx, width, state.achievementOverlay);
+  }
+
+  // Trophy panel (Sprint 13)
+  if (state.trophyPanelOpen) {
+    drawTrophyPanel(ctx, width, height, state.achievements);
+  }
 }
 
 function drawGrid(ctx: CanvasRenderingContext2D, w: number, h: number) {
@@ -775,6 +785,164 @@ function drawEvolutionTransition(
       ctx.fill();
     }
   }
+}
+
+// Sprint 13: Achievement overlay
+function drawAchievementOverlay(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  overlay: { name: string; icon: string; timer: number }
+) {
+  const maxTimer = 4;
+  const progress = 1 - overlay.timer / maxTimer;
+
+  // Slide in from top, hold, slide out
+  let y: number;
+  let alpha: number;
+  if (progress < 0.15) {
+    // Slide in
+    const t = progress / 0.15;
+    y = -60 + t * 140;
+    alpha = t;
+  } else if (progress > 0.8) {
+    // Slide out
+    const t = (progress - 0.8) / 0.2;
+    y = 80 - t * 140;
+    alpha = 1 - t;
+  } else {
+    y = 80;
+    alpha = 1;
+  }
+
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, alpha);
+
+  const cx = width / 2;
+  const bannerW = 280;
+  const bannerH = 56;
+
+  // Golden banner background
+  const grad = ctx.createLinearGradient(cx - bannerW / 2, y, cx + bannerW / 2, y);
+  grad.addColorStop(0, 'rgba(180, 130, 20, 0.95)');
+  grad.addColorStop(0.5, 'rgba(255, 200, 50, 0.95)');
+  grad.addColorStop(1, 'rgba(180, 130, 20, 0.95)');
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.roundRect(cx - bannerW / 2, y - bannerH / 2, bannerW, bannerH, 12);
+  ctx.fill();
+
+  // Border glow
+  ctx.strokeStyle = 'rgba(255, 215, 0, 0.6)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Icon
+  ctx.font = '24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(overlay.icon, cx - bannerW / 2 + 30, y);
+
+  // "Achievement Unlocked!"
+  ctx.font = 'bold 11px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+  ctx.textAlign = 'left';
+  ctx.fillText('ACHIEVEMENT UNLOCKED', cx - bannerW / 2 + 52, y - 10);
+
+  // Achievement name
+  ctx.font = 'bold 16px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(overlay.name, cx - bannerW / 2 + 52, y + 10);
+
+  ctx.restore();
+}
+
+// Sprint 13: Trophy panel
+function drawTrophyPanel(
+  ctx: CanvasRenderingContext2D,
+  width: number, height: number,
+  achievements: AchievementUnlock[]
+) {
+  ctx.save();
+
+  // Semi-transparent backdrop
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.fillRect(0, 0, width, height);
+
+  const panelW = Math.min(400, width - 40);
+  const panelH = Math.min(500, height - 80);
+  const px = (width - panelW) / 2;
+  const py = (height - panelH) / 2;
+
+  // Panel background
+  ctx.fillStyle = 'rgba(15, 15, 30, 0.95)';
+  ctx.beginPath();
+  ctx.roundRect(px, py, panelW, panelH, 16);
+  ctx.fill();
+
+  // Border
+  ctx.strokeStyle = 'rgba(255, 215, 0, 0.3)';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Title
+  ctx.font = 'bold 22px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillStyle = '#ffd700';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🏆 Trophy Case', width / 2, py + 35);
+
+  // Divider
+  ctx.strokeStyle = 'rgba(255, 215, 0, 0.15)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(px + 20, py + 58);
+  ctx.lineTo(px + panelW - 20, py + 58);
+  ctx.stroke();
+
+  // Hint text
+  ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+  ctx.fillText('Press T to close', width / 2, py + panelH - 20);
+
+  if (achievements.length === 0) {
+    ctx.font = '16px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.fillText('No achievements yet — keep catching gummies!', width / 2, py + panelH / 2);
+    ctx.restore();
+    return;
+  }
+
+  // Achievement rows
+  const startY = py + 75;
+  const rowH = 52;
+
+  for (let i = 0; i < achievements.length && i < 8; i++) {
+    const a = achievements[i];
+    const ry = startY + i * rowH;
+
+    // Row background
+    ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 255, 255, 0.03)' : 'transparent';
+    ctx.fillRect(px + 10, ry, panelW - 20, rowH);
+
+    // Icon
+    ctx.font = '24px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(a.icon, px + 35, ry + rowH / 2);
+
+    // Name
+    ctx.font = 'bold 15px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.textAlign = 'left';
+    ctx.fillText(a.name, px + 58, ry + 20);
+
+    // Description
+    ctx.font = '12px -apple-system, BlinkMacSystemFont, sans-serif';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+    ctx.fillText(a.description, px + 58, ry + 37);
+  }
+
+  ctx.restore();
 }
 
 // Sprint 11: Connector status

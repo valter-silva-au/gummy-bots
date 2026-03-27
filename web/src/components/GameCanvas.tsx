@@ -51,6 +51,14 @@ export function GameCanvas() {
         s.levelUpTimer = 3;
       }
     }
+
+    if (msg.type === 'achievement:unlocked' && msg.payload) {
+      const p = msg.payload as { id: string; name: string; description: string; icon: string };
+      stateRef.current.achievements.push({
+        id: p.id, name: p.name, description: p.description, icon: p.icon,
+      });
+      stateRef.current.achievementOverlay = { name: p.name, icon: p.icon, timer: 4 };
+    }
   }, []);
 
   const { isConnected } = useWebSocket(handleWSMessage);
@@ -96,6 +104,16 @@ export function GameCanvas() {
     resize();
     window.addEventListener('resize', resize);
 
+    // Trophy panel toggle
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 't' || e.key === 'T') {
+        if (stateRef.current) {
+          stateRef.current.trophyPanelOpen = !stateRef.current.trophyPanelOpen;
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+
     let animFrame: number;
     const loop = (time: number) => {
       const dt = Math.min((time - lastTimeRef.current) / 1000, 0.05);
@@ -117,6 +135,7 @@ export function GameCanvas() {
     return () => {
       cancelAnimationFrame(animFrame);
       window.removeEventListener('resize', resize);
+      window.removeEventListener('keydown', handleKey);
     };
   }, [isConnected]);
 
