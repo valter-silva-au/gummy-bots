@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"regexp"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,6 +18,20 @@ import (
 )
 
 const version = "0.1.0"
+
+var hexColorPattern = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+var knownColors = map[string]bool{
+	"blue": true, "green": true, "orange": true, "red": true, "purple": true,
+	"yellow": true, "cyan": true, "pink": true, "white": true, "black": true,
+}
+
+func isValidColor(color string) bool {
+	if hexColorPattern.MatchString(color) {
+		return true
+	}
+	return knownColors[color]
+}
 
 func maxBodySize(maxBytes int64) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -62,6 +77,8 @@ func NewRouter(db *store.DB, hub *Hub, bedrock *agent.BedrockClient) http.Handle
 		MaxAge:           300,
 	}))
 	r.Use(maxBodySize(1 << 20)) // 1MB request body limit
+	// M11: Rate limiting - 100 requests per minute per IP
+	r.Use(RateLimitMiddleware(NewIPRateLimiter(100, time.Minute)))
 
 	h := &Handler{db: db, hub: hub, bedrock: bedrock, combo: physics.NewComboTracker()}
 
@@ -261,16 +278,29 @@ func (h *Handler) CreateGummy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// M2: Validate all input fields
 	if gummy.TaskID <= 0 {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "taskId must be positive"})
 		return
 	}
+
+	// Validate color (hex pattern or known color names)
+	if !isValidColor(gummy.Color) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "color must be hex (#rrggbb) or known name"})
+		return
+	}
+
+	// Validate size range
 	if gummy.Size < 0.5 || gummy.Size > 3.0 {
 		gummy.Size = 1.0 // Default
 	}
+
+	// Validate orbit radius range
 	if gummy.OrbitRadius < 80 || gummy.OrbitRadius > 250 {
 		gummy.OrbitRadius = 150.0 // Default
 	}
+
+	// Validate orbit speed range
 	if gummy.OrbitSpeed < 3000 || gummy.OrbitSpeed > 20000 {
 		gummy.OrbitSpeed = 10000.0 // Default
 	}
