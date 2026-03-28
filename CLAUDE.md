@@ -3,7 +3,7 @@
 ## Project Overview
 **Gummy Bots** — A gamified AI assistant where users flick task bubbles at a central AI bot.
 - **Repo:** https://github.com/valter-silva-au/gummy-bots
-- **Status:** Full-stack local-first build in progress
+- **Status:** Phase 1 complete (14 sprints + security hardening). Phase 2 in progress (launch prep).
 
 ## Architecture — LOCAL FIRST, NO CLOUD
 
@@ -32,7 +32,7 @@ Everything runs locally. No cloud services, no SaaS dependencies.
 - Canvas/WebGL for physics rendering
 - Web Audio API for ASMR sounds
 - WebSocket connection to local Go server
-- For local testing and demo purposes
+- **Status:** Deprioritized per YC office hours feedback — mobile is the primary product
 
 ### LLM Configuration
 ```
@@ -84,11 +84,13 @@ NO external API calls except Bedrock
 ```
 gummy-bots/
 ├── CLAUDE.md              ← You are here
-├── README.md
+├── README.md              ← GitHub-ready project presentation
+├── CHANGELOG.md           ← Complete feature history (Phase 1 + Phase 2)
 ├── docs/
 │   ├── idea.md            ← Full product vision
 │   ├── market-research.md ← Deep market & feasibility analysis
-│   └── harness.md         ← Development harness (3-agent sprint workflow)
+│   ├── harness.md         ← Development harness (3-agent sprint workflow)
+│   └── office-hours-review.md ← YC office hours feedback
 ├── memory-bank/
 │   ├── project-brief.md   ← Core requirements and goals
 │   ├── active-context.md  ← Current work focus and recent changes
@@ -96,7 +98,7 @@ gummy-bots/
 │   └── decisions.md       ← Architecture decisions and rationale
 ├── sprints/
 │   ├── backlog.md         ← Ordered feature backlog
-│   └── sprint-{N}/       ← Per-sprint contracts, evaluations, feedback
+│   └── sprint-{N}/       ← Per-sprint contracts, evaluations, feedback (14 complete)
 ├── server/                ← Go backend
 │   ├── main.go
 │   ├── go.mod
@@ -107,13 +109,14 @@ gummy-bots/
 │   │   ├── store/         ← SQLite persistence
 │   │   └── physics/       ← Server-side task prioritization logic
 │   └── ...
-├── web/                   ← React web app
+├── landing/               ← Landing page with waitlist (Phase 2 - in progress)
+├── web/                   ← React web app (deprioritized per YC feedback)
 │   ├── src/
 │   ├── vite.config.ts
 │   └── ...
-└── gummy-bots-app/        ← Expo mobile app
+└── gummy-bots-app/        ← Expo mobile app (PRIMARY PRODUCT)
     ├── App.tsx
-    ├── src/components/
+    ├── src/components/    ← BotOrb, GummyField, StatusHeader, ShareButton, etc.
     └── ...
 ```
 
@@ -139,19 +142,21 @@ Key rules:
 
 ## Commands
 ```bash
-# Backend (Go)
+# Backend (Go) - optional, app works in standalone mode
 cd server && go run .
 
-# Mobile app
+# Mobile app (PRIMARY)
 cd gummy-bots-app && npx expo start
 
-# Web app
+# Landing page (Phase 2 - in progress)
+cd landing && npm run dev
+
+# Web app (deprioritized)
 cd web && npm run dev
 
-# All together (use separate terminals or tmux)
-# Terminal 1: cd server && go run .
-# Terminal 2: cd gummy-bots-app && npx expo start
-# Terminal 3: cd web && npm run dev
+# Recommended workflow for Phase 2:
+# Terminal 1: cd gummy-bots-app && npx expo start
+# Terminal 2: cd landing && npm run dev
 ```
 
 ## Environment
