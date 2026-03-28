@@ -10,11 +10,14 @@ import Animated, {
   withSpring,
   Easing,
 } from 'react-native-reanimated';
+import ViewShot from 'react-native-view-shot';
 import BotOrb from './src/components/BotOrb';
 import GummyField, { GummyData } from './src/components/GummyField';
 import StatusHeader from './src/components/StatusHeader';
 import ConnectorDock from './src/components/ConnectorDock';
 import DoneToast from './src/components/DoneToast';
+import ShareButton from './src/components/ShareButton';
+import Watermark from './src/components/Watermark';
 import { useWebSocket, WSMessage } from './src/hooks/useWebSocket';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -72,6 +75,9 @@ export default function App() {
   const catchColor = useSharedValue('#00dcff');
   const counterPop = useSharedValue(1);
   const screenShake = useSharedValue(0);
+
+  // ViewShot ref for share replay capture
+  const viewShotRef = useRef<ViewShot>(null);
 
   const centerX = SCREEN_W / 2;
   const centerY = SCREEN_H * 0.42;
@@ -222,65 +228,73 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={styles.root}>
-      <Animated.View style={[styles.container, shakeStyle]}>
-        <StatusBar style="light" />
+      <ViewShot ref={viewShotRef} style={styles.root} options={{ format: 'png', quality: 1 }}>
+        <Animated.View style={[styles.container, shakeStyle]}>
+          <StatusBar style="light" />
 
-        {/* Status Bar with dynamic level/streak */}
-        <StatusHeader level={level} streakDays={streak} />
+          {/* Status Bar with dynamic level/streak */}
+          <StatusHeader level={level} streakDays={streak} />
 
-        {/* Task completed counter */}
-        <Animated.View style={[styles.counterContainer, counterStyle]}>
-          <Text style={styles.counterValue}>{completedCount}</Text>
-          <Text style={styles.counterLabel}>flicked</Text>
-          {comboCount >= 2 && (
-            <Text style={styles.comboText}>{comboCount}x combo!</Text>
-          )}
-        </Animated.View>
+          {/* Task completed counter */}
+          <Animated.View style={[styles.counterContainer, counterStyle]}>
+            <Text style={styles.counterValue}>{completedCount}</Text>
+            <Text style={styles.counterLabel}>flicked</Text>
+            {comboCount >= 2 && (
+              <Text style={styles.comboText}>{comboCount}x combo!</Text>
+            )}
+          </Animated.View>
 
-        {/* Main area */}
-        <View style={styles.field}>
-          {/* Bot Orb at center */}
-          <View
-            style={[
-              styles.botContainer,
-              { left: centerX - 90, top: centerY - 90 - 80 },
-            ]}
-          >
-            <BotOrb catchFlash={catchFlash} catchColor={catchColor} />
+          {/* Main area */}
+          <View style={styles.field}>
+            {/* Bot Orb at center */}
+            <View
+              style={[
+                styles.botContainer,
+                { left: centerX - 90, top: centerY - 90 - 80 },
+              ]}
+            >
+              <BotOrb catchFlash={catchFlash} catchColor={catchColor} />
+            </View>
+
+            {/* Gummies orbiting */}
+            <GummyField
+              gummies={gummies}
+              centerX={centerX}
+              centerY={centerY - 80}
+              onCatch={handleCatch}
+              onDismiss={handleDismiss}
+              catchFlash={catchFlash}
+              catchColor={catchColor}
+            />
           </View>
 
-          {/* Gummies orbiting */}
-          <GummyField
-            gummies={gummies}
-            centerX={centerX}
-            centerY={centerY - 80}
-            onCatch={handleCatch}
-            onDismiss={handleDismiss}
-            catchFlash={catchFlash}
-            catchColor={catchColor}
-          />
-        </View>
+          {/* Done Toasts */}
+          {toasts.map((t) => (
+            <DoneToast
+              key={t.id}
+              label={t.label}
+              onDone={() => handleToastDone(t.id)}
+            />
+          ))}
 
-        {/* Done Toasts */}
-        {toasts.map((t) => (
-          <DoneToast
-            key={t.id}
-            label={t.label}
-            onDone={() => handleToastDone(t.id)}
-          />
-        ))}
+          {/* Watermark overlay for share captures */}
+          <Watermark />
 
-        {/* Connector Dock */}
-        <ConnectorDock />
+          {/* Connector Dock */}
+          <ConnectorDock />
 
-        {/* Connection indicator — shows standalone mode text when offline */}
-        <View style={styles.connectionBar}>
-          <View style={[styles.connectionDot, { backgroundColor: isConnected ? '#44cc66' : '#666' }]} />
-          <Text style={styles.connectionText}>
-            {isConnected ? 'Live' : 'Standalone'}
-          </Text>
-        </View>
-      </Animated.View>
+          {/* Share replay button */}
+          <ShareButton viewRef={viewShotRef} />
+
+          {/* Connection indicator — shows standalone mode text when offline */}
+          <View style={styles.connectionBar}>
+            <View style={[styles.connectionDot, { backgroundColor: isConnected ? '#44cc66' : '#666' }]} />
+            <Text style={styles.connectionText}>
+              {isConnected ? 'Live' : 'Standalone'}
+            </Text>
+          </View>
+        </Animated.View>
+      </ViewShot>
     </GestureHandlerRootView>
   );
 }
