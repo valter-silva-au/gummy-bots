@@ -1,8 +1,7 @@
 import React, { useCallback, useRef } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View, Alert } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
 import ViewShot, { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
 
 interface ShareButtonProps {
   viewRef: React.RefObject<ViewShot | null>;
@@ -16,16 +15,12 @@ export default function ShareButton({ viewRef }: ShareButtonProps) {
     isCapturing.current = true;
 
     try {
-      // Capture the game view as a PNG
+      // Capture the game view as a PNG (includes watermark overlay)
       const uri = await captureRef(viewRef, {
         format: 'png',
         quality: 1,
         result: 'tmpfile',
       });
-
-      // Add watermark by copying to a permanent location with branding filename
-      const watermarkedUri = `${FileSystem.cacheDirectory}gummy-bots-flick-${Date.now()}.png`;
-      await FileSystem.copyAsync({ from: uri, to: watermarkedUri });
 
       // Check if sharing is available
       const isAvailable = await Sharing.isAvailableAsync();
@@ -34,8 +29,8 @@ export default function ShareButton({ viewRef }: ShareButtonProps) {
         return;
       }
 
-      // Share the captured screenshot
-      await Sharing.shareAsync(watermarkedUri, {
+      // Share the captured screenshot with Gummy Bots branding
+      await Sharing.shareAsync(uri, {
         mimeType: 'image/png',
         dialogTitle: 'Share your Gummy Bots flick!',
         UTI: 'public.png',
