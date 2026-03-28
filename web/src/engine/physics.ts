@@ -120,6 +120,7 @@ function updateBot(state: GameState, dt: number) {
 function updateGummies(state: GameState, dt: number) {
   for (const g of state.gummies) {
     // Smooth entry animation
+    // TODO: Track entry time as cumulative dt for deterministic physics
     const entryAge = performance.now() - g.entryTime;
     const entryDuration = 300; // 0.3s
     if (entryAge < entryDuration && g.state === 'orbiting') {
