@@ -46,10 +46,21 @@
 - [x] Expo prototype: BotOrb, GummyField, StatusHeader, ConnectorDock, DoneToast
 - [x] CLAUDE.md + memory-bank setup
 
+### Phase 2: Launch Prep (2026-03-28)
+- [x] Landing page — premium dark-themed waitlist page at `landing/index.html`
+- [x] Quality pass — input validation (CreateGummy), IP rate limiting middleware
+- [x] Go unit tests — 23 tests for XP calculation, level progression, combos, achievements
+- [x] Mobile onboarding — 3-slide swipeable intro (Meet Your Bot → Flick to Execute → Get Stuff Done)
+- [x] Task counter polish — checkmark, card background, pop animation on increment
+- [x] App config — dark theme splash, bundle IDs, proper app name
+- [x] README rewrite — compelling GitHub presentation with architecture diagram
+- [x] CHANGELOG — complete history of all 14 sprints + security hardening
+- [x] CLAUDE.md updated — reflects Phase 2 state, web deprioritized
+
 ## Next (YC Path A — Ship This Week)
 - [ ] Record 5 TikTok-style videos (different angles, slow-mo, ASMR mic)
 - [ ] Ship to TestFlight
-- [ ] Set up waitlist landing page (gummybots.app)
+- [ ] Deploy landing page to gummybots.app
 - [ ] Post videos and measure response
 
 ## Future (After Validation)
