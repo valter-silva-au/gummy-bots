@@ -6,7 +6,7 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import type { WSMessage } from '../hooks/useWebSocket';
 import { playPopSound, playDismissSound } from '../engine/audio';
 
-const API_BASE = 'http://localhost:8088';
+const API_BASE = 'http://localhost:8080';
 
 export function GameCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -63,18 +63,6 @@ export function GameCanvas() {
 
   const { isConnected } = useWebSocket(handleWSMessage);
 
-  // Set up callbacks
-  useEffect(() => {
-    if (stateRef.current) {
-      stateRef.current.onCatch = (gummyId: string) => {
-        fetch(`${API_BASE}/api/gummies/${gummyId}/execute`, { method: 'POST' })
-          .catch(() => { /* Server may be offline */ });
-      };
-      stateRef.current.onPopSound = (pitch: number) => playPopSound(pitch);
-      stateRef.current.onDismissSound = () => playDismissSound();
-    }
-  }, []);
-
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -88,7 +76,7 @@ export function GameCanvas() {
       canvas.height = window.innerHeight * dpr;
       canvas.style.width = `${window.innerWidth}px`;
       canvas.style.height = `${window.innerHeight}px`;
-      ctx.scale(dpr, dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       if (stateRef.current) {
         const s = stateRef.current;
@@ -98,6 +86,13 @@ export function GameCanvas() {
         s.bot.y = window.innerHeight * 0.42;
       } else {
         stateRef.current = createInitialState(window.innerWidth, window.innerHeight);
+        // Set up callbacks right after creating initial state
+        stateRef.current.onCatch = (gummyId: string) => {
+          fetch(`${API_BASE}/api/gummies/${gummyId}/execute`, { method: 'POST' })
+            .catch(() => { /* Server may be offline */ });
+        };
+        stateRef.current.onPopSound = (pitch: number) => playPopSound(pitch);
+        stateRef.current.onDismissSound = () => playDismissSound();
       }
     };
 
@@ -186,6 +181,18 @@ export function GameCanvas() {
     dragStartRef.current = null;
   };
 
+  const handleMouseLeave = useCallback(() => {
+    if (stateRef.current && stateRef.current.dragTarget) {
+      const g = stateRef.current.gummies.find(g => g.id === stateRef.current!.dragTarget);
+      if (g && g.isDragging) {
+        g.isDragging = false;
+        g.angle = Math.atan2(g.y - stateRef.current.bot.y, g.x - stateRef.current.bot.x);
+      }
+      stateRef.current.dragTarget = null;
+    }
+    dragStartRef.current = null;
+  }, []);
+
   return (
     <canvas
       ref={canvasRef}
@@ -202,7 +209,7 @@ export function GameCanvas() {
       onMouseDown={handlePointerDown}
       onMouseMove={handlePointerMove}
       onMouseUp={handlePointerUp}
-      onMouseLeave={handlePointerUp}
+      onMouseLeave={handleMouseLeave}
       onTouchStart={handlePointerDown}
       onTouchMove={handlePointerMove}
       onTouchEnd={handlePointerUp}

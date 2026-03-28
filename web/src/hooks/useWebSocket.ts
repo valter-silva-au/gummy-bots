@@ -5,7 +5,7 @@ export interface WSMessage {
   payload?: unknown;
 }
 
-const WS_URL = 'ws://localhost:8088/ws';
+const WS_URL = 'ws://localhost:8080/ws';
 const RECONNECT_BASE = 1000;
 const RECONNECT_MAX = 30000;
 

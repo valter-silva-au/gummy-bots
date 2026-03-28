@@ -76,33 +76,15 @@ type bedrockResponse struct {
 // extractJSON strips markdown code fences from LLM output.
 func extractJSON(text string) string {
 	// Strip ```json ... ``` wrapping
-	if idx := indexOf(text, "```json"); idx >= 0 {
+	if idx := strings.Index(text, "```json"); idx >= 0 {
 		text = text[idx+7:]
-	} else if idx := indexOf(text, "```"); idx >= 0 {
+	} else if idx := strings.Index(text, "```"); idx >= 0 {
 		text = text[idx+3:]
 	}
-	if idx := lastIndexOf(text, "```"); idx >= 0 {
+	if idx := strings.LastIndex(text, "```"); idx >= 0 {
 		text = text[:idx]
 	}
 	return strings.TrimSpace(text)
-}
-
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
-}
-
-func lastIndexOf(s, substr string) int {
-	for i := len(s) - len(substr); i >= 0; i-- {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
 }
 
 func (c *BedrockClient) invoke(model string, system string, messages []Message, limiter *RateLimiter) (string, error) {
@@ -141,7 +123,7 @@ func (c *BedrockClient) invoke(model string, system string, messages []Message, 
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
 		return "", fmt.Errorf("read response: %w", err)
 	}

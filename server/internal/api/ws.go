@@ -9,11 +9,24 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+var allowedOrigins = map[string]bool{
+	"http://localhost:3000":  true,
+	"http://localhost:8080":  true, // Go server itself
+	"http://localhost:8081":  true,
+	"http://localhost:5173":  true,
+	"http://localhost:19006": true,
+}
+
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins for local dev
+		origin := r.Header.Get("Origin")
+		// Non-browser clients may not send Origin header
+		if origin == "" {
+			return true
+		}
+		return allowedOrigins[origin]
 	},
 }
 
@@ -134,8 +147,7 @@ func (c *Client) readPump() {
 		// Parse incoming message
 		var msg WSMessage
 		if err := json.Unmarshal(message, &msg); err != nil {
-			// Echo raw messages back for testing
-			c.send <- message
+			slog.Warn("ws received invalid json", "error", err)
 			continue
 		}
 
@@ -146,8 +158,8 @@ func (c *Client) readPump() {
 			continue
 		}
 
-		// Broadcast to all clients
-		c.hub.broadcast <- message
+		// Drop unknown message types
+		slog.Warn("ws received unknown message type", "type", msg.Type)
 	}
 }
 

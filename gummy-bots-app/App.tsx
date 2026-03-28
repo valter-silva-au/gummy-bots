@@ -82,10 +82,10 @@ export default function App() {
   // WebSocket connection
   const handleWSMessage = useCallback((msg: WSMessage) => {
     if (msg.type === 'gummy:new' && msg.payload) {
-      const p = msg.payload as { id: number; taskId: number; color: string; size: number; orbitRadius: number; orbitSpeed: number };
+      const p = msg.payload as { id: number; taskId: number; color: string; size: number; orbitRadius: number; orbitSpeed: number; label?: string };
       const newGummy: GummyData = {
         id: String(p.id),
-        label: `Task #${p.taskId}`,
+        label: p.label || `Task #${p.taskId}`,
         color: p.color || '#4a90ff',
         orbitRadius: p.orbitRadius || 150 + Math.random() * 40,
         orbitSpeed: p.orbitSpeed || 8000 + Math.random() * 4000,

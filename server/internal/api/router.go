@@ -1,9 +1,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -14,6 +17,35 @@ import (
 )
 
 const version = "0.1.0"
+
+func maxBodySize(maxBytes int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func optionalAPIKey(next http.Handler) http.Handler {
+	apiKey := os.Getenv("GUMMY_API_KEY")
+	if apiKey == "" {
+		return next // No auth in local dev
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip auth for health check
+		if r.URL.Path == "/api/health" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		auth := r.Header.Get("Authorization")
+		if auth != "Bearer "+apiKey {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
 
 func NewRouter(db *store.DB, hub *Hub, bedrock *agent.BedrockClient) http.Handler {
 	r := chi.NewRouter()
@@ -29,11 +61,16 @@ func NewRouter(db *store.DB, hub *Hub, bedrock *agent.BedrockClient) http.Handle
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
+	r.Use(maxBodySize(1 << 20)) // 1MB request body limit
 
 	h := &Handler{db: db, hub: hub, bedrock: bedrock, combo: physics.NewComboTracker()}
 
 	r.Get("/api/health", h.Health)
 	r.Get("/ws", h.WebSocket)
+
+	// Apply API key auth to all /api/* routes (except health check, handled in middleware)
+	r.Group(func(r chi.Router) {
+		r.Use(optionalAPIKey)
 
 	r.Route("/api/users", func(r chi.Router) {
 		r.Post("/", h.CreateUser)
@@ -60,6 +97,7 @@ func NewRouter(db *store.DB, hub *Hub, bedrock *agent.BedrockClient) http.Handle
 	r.Route("/api/agent", func(r chi.Router) {
 		r.Post("/triage", h.AgentTriage)
 		r.Post("/execute", h.AgentExecute)
+	})
 	})
 
 	return r
@@ -223,6 +261,20 @@ func (h *Handler) CreateGummy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if gummy.TaskID <= 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "taskId must be positive"})
+		return
+	}
+	if gummy.Size < 0.5 || gummy.Size > 3.0 {
+		gummy.Size = 1.0 // Default
+	}
+	if gummy.OrbitRadius < 80 || gummy.OrbitRadius > 250 {
+		gummy.OrbitRadius = 150.0 // Default
+	}
+	if gummy.OrbitSpeed < 3000 || gummy.OrbitSpeed > 20000 {
+		gummy.OrbitSpeed = 10000.0 // Default
+	}
+
 	if err := h.db.CreateGummy(&gummy); err != nil {
 		slog.Error("create gummy failed", "error", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create gummy"})
@@ -267,7 +319,7 @@ func (h *Handler) AgentTriage(w http.ResponseWriter, r *http.Request) {
 	result, err := h.bedrock.Triage(req)
 	if err != nil {
 		slog.Error("triage failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "triage processing failed"})
 		return
 	}
 	writeJSON(w, http.StatusOK, result)
@@ -294,7 +346,7 @@ func (h *Handler) AgentExecute(w http.ResponseWriter, r *http.Request) {
 	result, err := h.bedrock.Execute(req)
 	if err != nil {
 		slog.Error("agent execute failed", "error", err)
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "agent processing failed"})
 		return
 	}
 
@@ -355,8 +407,14 @@ func (h *Handler) checkAchievements(userID int64, xpGained int, comboCount int, 
 		return
 	}
 
-	executedCount, _ := h.db.CountExecutedGummies()
-	activeCount, _ := h.db.CountActiveGummies()
+	executedCount, err := h.db.CountExecutedGummies()
+	if err != nil {
+		slog.Error("count executed gummies failed", "error", err)
+	}
+	activeCount, err := h.db.CountActiveGummies()
+	if err != nil {
+		slog.Error("count active gummies failed", "error", err)
+	}
 
 	ctx := physics.CheckContext{
 		TotalExecutions: executedCount,
@@ -406,15 +464,22 @@ func (h *Handler) ExecuteGummy(w http.ResponseWriter, r *http.Request) {
 	comboMultiplier := physics.ComboMultiplier(comboCount)
 
 	// Update user 1 (default user for now)
-	user, _ := h.db.GetUser(1)
+	user, err := h.db.GetUser(1)
+	if err != nil {
+		slog.Warn("default user not found", "error", err)
+	}
 	if user != nil {
 		newXP := user.XP + xpGained
 		newLevel := physics.LevelForXP(newXP)
-		h.db.UpdateUserXP(user.ID, newXP, newLevel)
+		if err := h.db.UpdateUserXP(user.ID, newXP, newLevel); err != nil {
+			slog.Error("update user XP failed", "error", err)
+		}
 
 		// Update streak
 		newStreak, newDate := physics.UpdateStreak(user.StreakLastDate, user.StreakDays)
-		h.db.UpdateUserStreak(user.ID, newStreak, newDate)
+		if err := h.db.UpdateUserStreak(user.ID, newStreak, newDate); err != nil {
+			slog.Error("update user streak failed", "error", err)
+		}
 
 		leveledUp := newLevel > user.Level
 
@@ -442,9 +507,12 @@ func (h *Handler) ExecuteGummy(w http.ResponseWriter, r *http.Request) {
 	// If Bedrock is configured, run the executor agent asynchronously
 	if h.bedrock.IsConfigured() {
 		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			_ = ctx // Context available for future use with Bedrock
 			result, err := h.bedrock.Execute(agent.ExecuteRequest{
-				TaskTitle: "Gummy task",
-				TaskContent: "Execute the flicked task",
+				TaskTitle:   "Gummy task execution",
+				TaskContent: "Execute the authorized flicked task",
 			})
 			if err != nil {
 				slog.Error("background execute failed", "error", err)

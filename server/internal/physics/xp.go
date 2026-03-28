@@ -1,6 +1,7 @@
 package physics
 
 import (
+	"sync"
 	"time"
 )
 
@@ -136,6 +137,7 @@ func UpdateStreak(lastDate string, currentDays int) (int, string) {
 
 // ComboTracker tracks rapid task completions.
 type ComboTracker struct {
+	mu         sync.Mutex
 	timestamps []time.Time
 	window     time.Duration
 }
@@ -147,6 +149,9 @@ func NewComboTracker() *ComboTracker {
 }
 
 func (c *ComboTracker) Record() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	now := time.Now()
 	c.timestamps = append(c.timestamps, now)
 

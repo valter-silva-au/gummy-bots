@@ -133,7 +133,10 @@ func (db *DB) CreateUser(username string) (*User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create user: %w", err)
 	}
-	id, _ := res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return nil, fmt.Errorf("get last insert id: %w", err)
+	}
 	return &User{
 		ID:        id,
 		Username:  username,
@@ -182,7 +185,11 @@ func (db *DB) CreateTask(t *Task) error {
 	if err != nil {
 		return fmt.Errorf("create task: %w", err)
 	}
-	t.ID, _ = res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("get last insert id: %w", err)
+	}
+	t.ID = id
 	return nil
 }
 
@@ -227,7 +234,11 @@ func (db *DB) CreateGummy(g *Gummy) error {
 	if err != nil {
 		return fmt.Errorf("create gummy: %w", err)
 	}
-	g.ID, _ = res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return fmt.Errorf("get last insert id: %w", err)
+	}
+	g.ID = id
 	return nil
 }
 

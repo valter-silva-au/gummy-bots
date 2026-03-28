@@ -5,7 +5,7 @@ export interface WSMessage {
   payload?: unknown;
 }
 
-const WS_URL = 'ws://localhost:8088/ws';
+const WS_URL = 'ws://localhost:8080/ws';
 const RECONNECT_DELAY = 3000;
 
 export function useWebSocket(onMessage?: (msg: WSMessage) => void) {

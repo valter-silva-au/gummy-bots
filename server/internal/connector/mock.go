@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"math/rand"
+	"math/rand" // Go 1.20+ auto-seeds math/rand from runtime, no explicit seeding needed
 	"time"
 
 	"github.com/valter-silva-au/gummy-bots/server/internal/api"
@@ -48,6 +48,7 @@ func (m *MockGmail) Stop() error {
 func (m *MockGmail) run() {
 	for {
 		// Wait 20-40 seconds
+		// Go 1.20+ auto-seeds math/rand from runtime, no explicit seeding needed
 		duration := time.Duration(20+rand.Intn(21)) * time.Second
 		select {
 		case <-time.After(duration):

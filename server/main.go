@@ -24,7 +24,11 @@ func main() {
 	log := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(log)
 
-	db, err := store.Open("gummy.db")
+	dbPath := os.Getenv("GUMMY_DB_PATH")
+	if dbPath == "" {
+		dbPath = "gummy.db"
+	}
+	db, err := store.Open(dbPath)
 	if err != nil {
 		slog.Error("failed to open database", "error", err)
 		os.Exit(1)
@@ -74,7 +78,7 @@ func main() {
 		Addr:         ":" + port,
 		Handler:      router,
 		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		WriteTimeout: 0, // Disabled for WebSocket support
 		IdleTimeout:  60 * time.Second,
 	}
 
@@ -99,7 +103,7 @@ func main() {
 		}
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
