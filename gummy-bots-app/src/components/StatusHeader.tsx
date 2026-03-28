@@ -1,11 +1,18 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
-export default function StatusHeader() {
+interface StatusHeaderProps {
+  level?: number;
+  streakDays?: number;
+}
+
+export default function StatusHeader({ level = 1, streakDays = 0 }: StatusHeaderProps) {
   return (
     <View style={styles.container}>
-      <Text style={styles.level}>Level 7</Text>
-      <Text style={styles.streak}>🔥 5-day streak</Text>
+      <Text style={styles.level}>Level {level}</Text>
+      {streakDays > 0 && (
+        <Text style={styles.streak}>{streakDays}-day streak</Text>
+      )}
     </View>
   );
 }

@@ -28,9 +28,9 @@ export interface GummyData {
 }
 
 const GUMMY_BASE_SIZE = 64;
-const BOT_GRAVITY_WELL = 120; // Magnetic snap radius — generous for imprecise flicks
-const BOT_CATCH_RADIUS = 85;  // Inner catch zone
-const VELOCITY_THRESHOLD = 300; // Min velocity toward center to trigger catch
+const BOT_GRAVITY_WELL = 130; // Magnetic snap radius — generous for imprecise flicks
+const BOT_CATCH_RADIUS = 95;  // Inner catch zone — wider for easier catches
+const VELOCITY_THRESHOLD = 250; // Min velocity toward center — lowered for snappier feel
 const EDGE_BOUNCE_DAMPING = 0.4;
 
 interface GummyFieldProps {
@@ -116,8 +116,8 @@ function SingleGummy({
       const currentY = Math.sin(angle.value) * gummy.orbitRadius;
       dragX.value = currentX;
       dragY.value = currentY;
-      // Lift effect
-      popScale.value = withSpring(1.15, { damping: 8, stiffness: 300 });
+      // Lift effect — snappy pick-up
+      popScale.value = withSpring(1.2, { damping: 6, stiffness: 400 });
       glowIntensity.value = withTiming(1, { duration: 150 });
     })
     .onUpdate((event) => {
@@ -201,27 +201,27 @@ function SingleGummy({
         glowIntensity.value = withTiming(0, { duration: 200 });
         runOnJS(triggerDismiss)();
       } else {
-        // === MISS: Bounce back to orbit ===
+        // === MISS: Bounce back to orbit with satisfying snap ===
         runOnJS(triggerMissHaptic)();
-        popScale.value = withSpring(1, { damping: 10, stiffness: 200 });
-        glowIntensity.value = withTiming(0, { duration: 300 });
+        popScale.value = withSpring(1, { damping: 6, stiffness: 300 });
+        glowIntensity.value = withTiming(0, { duration: 200 });
 
-        // Spring back with overshoot for satisfying bounce
+        // Tighter spring back — snappier bounce with overshoot
         const restoreAngle = Math.atan2(posY, posX);
         const targetX = Math.cos(restoreAngle) * gummy.orbitRadius;
         const targetY = Math.sin(restoreAngle) * gummy.orbitRadius;
 
         dragX.value = withSpring(targetX, {
-          damping: 8,
-          stiffness: 100,
-          mass: 1.2,
+          damping: 6,
+          stiffness: 180,
+          mass: 0.8,
         });
         dragY.value = withSpring(
           targetY,
           {
-            damping: 8,
-            stiffness: 100,
-            mass: 1.2,
+            damping: 6,
+            stiffness: 180,
+            mass: 0.8,
           },
           (finished) => {
             if (finished) {
