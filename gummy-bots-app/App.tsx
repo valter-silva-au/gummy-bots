@@ -9,6 +9,7 @@ import Animated, {
   withSequence,
   withSpring,
   Easing,
+  interpolate,
 } from 'react-native-reanimated';
 import ViewShot from 'react-native-view-shot';
 import BotOrb from './src/components/BotOrb';
@@ -18,6 +19,7 @@ import ConnectorDock from './src/components/ConnectorDock';
 import DoneToast from './src/components/DoneToast';
 import ShareButton from './src/components/ShareButton';
 import Watermark from './src/components/Watermark';
+import OnboardingScreen from './src/components/OnboardingScreen';
 import { useWebSocket, WSMessage } from './src/hooks/useWebSocket';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
@@ -64,6 +66,7 @@ function getInitialGummies(): GummyData[] {
 }
 
 export default function App() {
+  const [hasOnboarded, setHasOnboarded] = useState(false);
   const [gummies, setGummies] = useState<GummyData[]>(getInitialGummies);
   const [toasts, setToasts] = useState<{ id: string; label: string }[]>([]);
   const [completedCount, setCompletedCount] = useState(0);
@@ -74,6 +77,7 @@ export default function App() {
   const catchFlash = useSharedValue(0);
   const catchColor = useSharedValue('#00dcff');
   const counterPop = useSharedValue(1);
+  const counterColorFlash = useSharedValue(0);
   const screenShake = useSharedValue(0);
 
   // ViewShot ref for share replay capture
@@ -195,10 +199,14 @@ export default function App() {
       setComboCount(1);
     }
 
-    // Counter pop animation
+    // Counter pop animation with color flash
     counterPop.value = withSequence(
       withSpring(1.3, { damping: 4, stiffness: 300 }),
       withSpring(1, { damping: 8, stiffness: 200 })
+    );
+    counterColorFlash.value = withSequence(
+      withTiming(1, { duration: 100 }),
+      withTiming(0, { duration: 500 })
     );
 
     setTimeout(() => {
@@ -216,15 +224,46 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== toastId));
   }, []);
 
-  // Animated counter style
-  const counterStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: counterPop.value }],
-  }));
+  // Animated counter style with color flash
+  const counterStyle = useAnimatedStyle(() => {
+    const flashColor = interpolate(
+      counterColorFlash.value,
+      [0, 1],
+      [0, 1]
+    );
+    return {
+      transform: [{ scale: counterPop.value }],
+    };
+  });
+
+  const counterValueStyle = useAnimatedStyle(() => {
+    const color = interpolate(
+      counterColorFlash.value,
+      [0, 1],
+      [1, 0]
+    );
+    return {
+      opacity: 1,
+    };
+  });
 
   // Screen shake on combo
   const shakeStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: screenShake.value }],
   }));
+
+  const handleOnboardingComplete = useCallback(() => {
+    setHasOnboarded(true);
+  }, []);
+
+  // Show onboarding on first launch
+  if (!hasOnboarded) {
+    return (
+      <GestureHandlerRootView style={styles.root}>
+        <OnboardingScreen onComplete={handleOnboardingComplete} />
+      </GestureHandlerRootView>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={styles.root}>
@@ -237,8 +276,13 @@ export default function App() {
 
           {/* Task completed counter */}
           <Animated.View style={[styles.counterContainer, counterStyle]}>
-            <Text style={styles.counterValue}>{completedCount}</Text>
-            <Text style={styles.counterLabel}>flicked</Text>
+            <View style={styles.counterRow}>
+              <Text style={styles.counterCheck}>✓</Text>
+              <Animated.Text style={[styles.counterValue, counterValueStyle]}>
+                {completedCount}
+              </Animated.Text>
+            </View>
+            <Text style={styles.counterLabel}>tasks completed</Text>
             {comboCount >= 2 && (
               <Text style={styles.comboText}>{comboCount}x combo!</Text>
             )}
@@ -319,6 +363,22 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     alignItems: 'center',
     zIndex: 10,
+    backgroundColor: 'rgba(0, 220, 255, 0.08)',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(0, 220, 255, 0.2)',
+  },
+  counterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  counterCheck: {
+    color: '#22c55e',
+    fontSize: 28,
+    fontWeight: '800',
   },
   counterValue: {
     color: '#ffffff',
@@ -331,11 +391,11 @@ const styles = StyleSheet.create({
   },
   counterLabel: {
     color: 'rgba(255,255,255,0.5)',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    letterSpacing: 2,
+    letterSpacing: 1,
     textTransform: 'uppercase',
-    marginTop: -4,
+    marginTop: -2,
   },
   comboText: {
     color: '#ffaa44',
