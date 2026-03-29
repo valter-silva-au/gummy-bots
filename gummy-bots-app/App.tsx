@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Dimensions, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSharedValue } from 'react-native-reanimated';
@@ -8,12 +8,9 @@ import Animated, {
   withTiming,
   withSequence,
   withSpring,
-  Easing,
-  interpolate,
 } from 'react-native-reanimated';
 import ViewShot from 'react-native-view-shot';
-import BotOrb from './src/components/BotOrb';
-import GummyField, { GummyData } from './src/components/GummyField';
+import GameCanvas, { GummyData } from './src/game/GameCanvas';
 import StatusHeader from './src/components/StatusHeader';
 import ConnectorDock from './src/components/ConnectorDock';
 import DoneToast from './src/components/DoneToast';
@@ -22,10 +19,7 @@ import Watermark from './src/components/Watermark';
 import OnboardingScreen from './src/components/OnboardingScreen';
 import { useWebSocket, WSMessage } from './src/hooks/useWebSocket';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-
 // 20 realistic tasks across all categories for standalone demo mode
-// These appear with timed delays to create a living, breathing experience
 const MOCK_TASK_POOL: Omit<GummyData, 'id' | 'startAngle'>[] = [
   // Comms (blue)
   { label: 'Reply to Mom', color: '#4a90ff', orbitRadius: 155, orbitSpeed: 8000, size: 0.9 },
@@ -54,7 +48,6 @@ const MOCK_TASK_POOL: Omit<GummyData, 'id' | 'startAngle'>[] = [
   { label: 'Cron Job Failed:\nRetry?', color: '#aa66ff', orbitRadius: 155, orbitSpeed: 9000, size: 1.0 },
 ];
 
-// Start with first 4 visible, rest appear over time
 const INITIAL_COUNT = 4;
 
 function getInitialGummies(): GummyData[] {
@@ -74,49 +67,34 @@ export default function App() {
   const [streak, setStreak] = useState(0);
   const [comboCount, setComboCount] = useState(0);
 
-  const catchFlash = useSharedValue(0);
-  const catchColor = useSharedValue('#00dcff');
   const counterPop = useSharedValue(1);
   const counterColorFlash = useSharedValue(0);
-  const screenShake = useSharedValue(0);
 
-  // ViewShot ref for share replay capture
   const viewShotRef = useRef<ViewShot>(null);
-
-  const centerX = SCREEN_W / 2;
-  const centerY = SCREEN_H * 0.42;
-
-  // Track which mock tasks have been spawned
   const nextMockIndexRef = useRef(INITIAL_COUNT);
   const lastCatchTimeRef = useRef(0);
 
-  // Timed mock task appearance (15-30s intervals) for standalone mode
+  // Timed mock task appearance (15-30s intervals)
   useEffect(() => {
     const spawnNext = () => {
       const idx = nextMockIndexRef.current;
       if (idx >= MOCK_TASK_POOL.length) {
-        // Cycle back through the pool with new IDs
         nextMockIndexRef.current = 0;
         return;
       }
-
       const task = MOCK_TASK_POOL[idx];
       const newGummy: GummyData = {
         ...task,
         id: `mock-${Date.now()}-${idx}`,
         startAngle: Math.random() * Math.PI * 2,
       };
-
       setGummies((prev) => {
-        // Cap at 8 visible gummies to avoid clutter
         if (prev.length >= 8) return prev;
         return [...prev, newGummy];
       });
-
       nextMockIndexRef.current = idx + 1;
     };
 
-    // Spawn new tasks every 15-30 seconds
     const scheduleNext = () => {
       const delay = 15000 + Math.random() * 15000;
       return setTimeout(() => {
@@ -126,13 +104,12 @@ export default function App() {
     };
 
     const timerRef = { current: scheduleNext() };
-
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, []);
 
-  // WebSocket connection — uses server gummies when available
+  // WebSocket connection
   const handleWSMessage = useCallback((msg: WSMessage) => {
     if (msg.type === 'gummy:new' && msg.payload) {
       const p = msg.payload as { id: number; taskId: number; color: string; size: number; orbitRadius: number; orbitSpeed: number; label?: string };
@@ -150,7 +127,6 @@ export default function App() {
         return [...prev, newGummy];
       });
     }
-
     if (msg.type === 'xp:gained' && msg.payload) {
       const p = msg.payload as { level: number; streak: number; combo: number };
       setLevel(p.level);
@@ -161,7 +137,7 @@ export default function App() {
 
   const { isConnected } = useWebSocket(handleWSMessage);
 
-  // Combo tracking for standalone mode
+  // Handle gummy catch
   const handleCatch = useCallback((gummy: GummyData) => {
     const now = Date.now();
     const timeSinceLast = now - lastCatchTimeRef.current;
@@ -172,47 +148,33 @@ export default function App() {
 
     setCompletedCount((prev) => {
       const next = prev + 1;
-      // Level up every 5 completions in standalone mode
       if (!isConnected) {
         setLevel(Math.floor(next / 5) + 1);
       }
       return next;
     });
 
-    // Combo detection: catches within 3 seconds
+    // Combo detection
     if (timeSinceLast < 3000 && timeSinceLast > 0) {
-      setComboCount((prev) => {
-        const next = prev + 1;
-        // Screen shake on 3+ combo
-        if (next >= 3) {
-          screenShake.value = withSequence(
-            withTiming(8, { duration: 50 }),
-            withTiming(-6, { duration: 50 }),
-            withTiming(4, { duration: 50 }),
-            withTiming(-2, { duration: 50 }),
-            withTiming(0, { duration: 50 })
-          );
-        }
-        return next;
-      });
+      setComboCount((prev) => prev + 1);
     } else {
       setComboCount(1);
     }
 
-    // Counter pop animation with color flash
+    // Counter pop animation
     counterPop.value = withSequence(
       withSpring(1.3, { damping: 4, stiffness: 300 }),
-      withSpring(1, { damping: 8, stiffness: 200 })
+      withSpring(1, { damping: 8, stiffness: 200 }),
     );
     counterColorFlash.value = withSequence(
       withTiming(1, { duration: 100 }),
-      withTiming(0, { duration: 500 })
+      withTiming(0, { duration: 500 }),
     );
 
     setTimeout(() => {
       setGummies((prev) => prev.filter((g) => g.id !== gummy.id));
     }, 300);
-  }, [isConnected, catchFlash, counterPop, screenShake]);
+  }, [isConnected, counterPop, counterColorFlash]);
 
   const handleDismiss = useCallback((gummy: GummyData) => {
     setTimeout(() => {
@@ -224,39 +186,14 @@ export default function App() {
     setToasts((prev) => prev.filter((t) => t.id !== toastId));
   }, []);
 
-  // Animated counter style with color flash
-  const counterStyle = useAnimatedStyle(() => {
-    const flashColor = interpolate(
-      counterColorFlash.value,
-      [0, 1],
-      [0, 1]
-    );
-    return {
-      transform: [{ scale: counterPop.value }],
-    };
-  });
-
-  const counterValueStyle = useAnimatedStyle(() => {
-    const color = interpolate(
-      counterColorFlash.value,
-      [0, 1],
-      [1, 0]
-    );
-    return {
-      opacity: 1,
-    };
-  });
-
-  // Screen shake on combo
-  const shakeStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: screenShake.value }],
+  const counterStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: counterPop.value }],
   }));
 
   const handleOnboardingComplete = useCallback(() => {
     setHasOnboarded(true);
   }, []);
 
-  // Show onboarding on first launch
   if (!hasOnboarded) {
     return (
       <GestureHandlerRootView style={styles.root}>
@@ -268,19 +205,17 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <ViewShot ref={viewShotRef} style={styles.root} options={{ format: 'png', quality: 1 }}>
-        <Animated.View style={[styles.container, shakeStyle]}>
+        <View style={styles.container}>
           <StatusBar style="light" />
 
-          {/* Status Bar with dynamic level/streak */}
+          {/* Status Bar */}
           <StatusHeader level={level} streakDays={streak} />
 
           {/* Task completed counter */}
           <Animated.View style={[styles.counterContainer, counterStyle]}>
             <View style={styles.counterRow}>
               <Text style={styles.counterCheck}>✓</Text>
-              <Animated.Text style={[styles.counterValue, counterValueStyle]}>
-                {completedCount}
-              </Animated.Text>
+              <Text style={styles.counterValue}>{completedCount}</Text>
             </View>
             <Text style={styles.counterLabel}>tasks completed</Text>
             {comboCount >= 2 && (
@@ -288,27 +223,13 @@ export default function App() {
             )}
           </Animated.View>
 
-          {/* Main area */}
+          {/* ═══ SKIA GAME CANVAS ═══ */}
           <View style={styles.field}>
-            {/* Bot Orb at center */}
-            <View
-              style={[
-                styles.botContainer,
-                { left: centerX - 90, top: centerY - 90 - 80 },
-              ]}
-            >
-              <BotOrb catchFlash={catchFlash} catchColor={catchColor} />
-            </View>
-
-            {/* Gummies orbiting */}
-            <GummyField
+            <GameCanvas
               gummies={gummies}
-              centerX={centerX}
-              centerY={centerY - 80}
               onCatch={handleCatch}
               onDismiss={handleDismiss}
-              catchFlash={catchFlash}
-              catchColor={catchColor}
+              comboCount={comboCount}
             />
           </View>
 
@@ -321,23 +242,23 @@ export default function App() {
             />
           ))}
 
-          {/* Watermark overlay for share captures */}
+          {/* Watermark overlay */}
           <Watermark />
 
           {/* Connector Dock */}
           <ConnectorDock />
 
-          {/* Share replay button */}
+          {/* Share button */}
           <ShareButton viewRef={viewShotRef} />
 
-          {/* Connection indicator — shows standalone mode text when offline */}
+          {/* Connection indicator */}
           <View style={styles.connectionBar}>
             <View style={[styles.connectionDot, { backgroundColor: isConnected ? '#44cc66' : '#666' }]} />
             <Text style={styles.connectionText}>
               {isConnected ? 'Live' : 'Standalone'}
             </Text>
           </View>
-        </Animated.View>
+        </View>
       </ViewShot>
     </GestureHandlerRootView>
   );
@@ -353,9 +274,6 @@ const styles = StyleSheet.create({
   },
   field: {
     flex: 1,
-  },
-  botContainer: {
-    position: 'absolute',
   },
   counterContainer: {
     position: 'absolute',
